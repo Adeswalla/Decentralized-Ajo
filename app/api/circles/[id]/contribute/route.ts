@@ -4,6 +4,7 @@ import { verifyToken, extractToken } from '@/lib/auth';
 import { validateBody, applyRateLimit } from '@/lib/api-helpers';
 import { ContributeSchema } from '@/lib/validations/circle';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { sendContributionReminder, sendPayoutAlert } from '@/lib/email';
 
 export async function POST(
   request: NextRequest,
@@ -50,6 +51,35 @@ export async function POST(
       where: { circleId_userId: { circleId: id, userId: payload.userId } },
       data: { totalContributed: { increment: data.amount } },
     });
+
+    // Remind all members who haven't contributed this round yet
+    const allMembers = await prisma.circleMember.findMany({
+      where: { circleId: id },
+      include: { user: { select: { email: true, firstName: true } } },
+    });
+    const contributedThisRound = await prisma.contribution.findMany({
+      where: { circleId: id, round: circle.currentRound },
+      select: { userId: true },
+    });
+    const contributedIds = new Set(contributedThisRound.map((c: { userId: string }) => c.userId));
+    for (const m of allMembers) {
+      if (!contributedIds.has(m.userId)) {
+        sendContributionReminder(m.user.email, m.user.firstName, circle.contributionAmount, circle.name);
+      }
+    }
+
+    // If all members have now contributed, alert the payout recipient for this round
+    const totalContributedThisRound = contributedIds.size + 1; // +1 for current contribution
+    if (totalContributedThisRound >= allMembers.length) {
+      const payoutMember = await prisma.circleMember.findFirst({
+        where: { circleId: id, rotationOrder: circle.currentRound },
+        include: { user: { select: { email: true, firstName: true } } },
+      });
+      if (payoutMember) {
+        const payoutAmount = circle.contributionAmount * allMembers.length;
+        sendPayoutAlert(payoutMember.user.email, payoutMember.user.firstName, payoutAmount);
+      }
+    }
 
     return NextResponse.json({ success: true, contribution }, { status: 201 });
   } catch (err) {
