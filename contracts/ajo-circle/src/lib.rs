@@ -120,6 +120,10 @@ impl AjoCircle {
 
         env.storage().instance().set(&DataKey::Circle, &circle_data);
 
+        // Set first round deadline: now + frequency_days converted to seconds
+        let deadline = env.ledger().timestamp() + (frequency_days as u64) * 86_400;
+        env.storage().instance().set(&DataKey::RoundDeadline, &deadline);
+
         let mut members: Map<Address, MemberData> = Map::new(&env);
         members.set(
             organizer.clone(),
@@ -223,12 +227,23 @@ impl AjoCircle {
 
         if let Some(mut member_data) = members.get(member.clone()) {
             member_data.total_contributed += amount;
-            members.set(member, member_data);
+            members.set(member.clone(), member_data);
         } else {
             return Err(AjoError::NotFound);
         }
 
+        // Count contributions this round (total_contributed tracks cumulative; use round * amount as threshold)
+        let round_contributions = members.iter()
+            .filter(|(_, m)| m.total_contributed >= (circle.current_round as i128) * circle.contribution_amount)
+            .count() as u32;
+
         env.storage().instance().set(&DataKey::Members, &members);
+
+        // If all members have contributed this round, advance the deadline
+        if round_contributions >= circle.member_count {
+            let next_deadline = deadline + (circle.frequency_days as u64) * 86_400;
+            env.storage().instance().set(&DataKey::RoundDeadline, &next_deadline);
+        }
 
         Ok(())
     }
