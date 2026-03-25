@@ -24,7 +24,7 @@ fn setup_test<'a>() -> (
     let user_2 = Address::generate(&env);
     let user_3 = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100, &30, &3);
+    client.initialize_circle(&organizer, &100i128, &30u32, &3u32);
 
     (env, client, organizer, user_1, user_2, user_3)
 }
@@ -42,10 +42,10 @@ fn test_circle_lifecycle() {
     assert_eq!(circle_state.member_count, 4); // Organizer + 3 members
 
     // 3 Contributions (actually 4 members including organizer)
-    client.contribute(&organizer, &100);
-    client.contribute(&user_1, &100);
-    client.contribute(&user_2, &100);
-    client.contribute(&user_3, &100);
+    client.contribute(&organizer, &100i128);
+    client.contribute(&user_1, &100i128);
+    client.contribute(&user_2, &100i128);
+    client.contribute(&user_3, &100i128);
 
     // Verify member balances
     let u1_bal = client.get_member_balance(&user_1);
@@ -69,7 +69,7 @@ fn test_unauthorized_contribution() {
 
     let external_user = Address::generate(&env);
     // Attempt to contribute without being added
-    client.contribute(&external_user, &100);
+    client.contribute(&external_user, &100i128);
 }
 
 #[test]
@@ -87,8 +87,8 @@ fn test_double_payout_claim() {
     let (_env, client, organizer, user_1, _user_2, _user_3) = setup_test();
     client.add_member(&organizer, &user_1);
     
-    client.contribute(&organizer, &100);
-    client.contribute(&user_1, &100);
+    client.contribute(&organizer, &100i128);
+    client.contribute(&user_1, &100i128);
 
     client.claim_payout(&user_1);
     // Cannot claim payout twice
@@ -101,10 +101,10 @@ fn test_partial_withdraw_insufficient_funds() {
     let (_env, client, organizer, user_1, _user_2, _user_3) = setup_test();
     client.add_member(&organizer, &user_1);
     
-    client.contribute(&user_1, &50);
+    client.contribute(&user_1, &50i128);
 
     // User only has 50 contributed. Withdrawing 60 should fail.
-    client.partial_withdraw(&user_1, &60);
+    client.partial_withdraw(&user_1, &60i128);
 }
 
 #[test]
@@ -112,8 +112,8 @@ fn test_partial_withdraw_success() {
     let (_env, client, organizer, user_1, _user_2, _user_3) = setup_test();
     client.add_member(&organizer, &user_1);
     
-    client.contribute(&user_1, &100);
-    let net_amount = client.partial_withdraw(&user_1, &50);
+    client.contribute(&user_1, &100i128);
+    let net_amount = client.partial_withdraw(&user_1, &50i128);
     
     // 10% penalty on 50 is 5. Net should be 45.
     assert_eq!(net_amount, 45);
@@ -150,7 +150,7 @@ fn test_bad_amount_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &0, &30, &3);
+    client.initialize_circle(&organizer, &0i128, &30u32, &3u32);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn test_bad_freq_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100, &0, &3);
+    client.initialize_circle(&organizer, &100i128, &0u32, &3u32);
 }
 
 #[test]
@@ -174,21 +174,21 @@ fn test_bad_rounds_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100, &30, &0);
+    client.initialize_circle(&organizer, &100i128, &30u32, &0u32);
 }
 
 #[test]
 #[should_panic(expected = "badamt")]
 fn test_contribute_bad_amount() {
     let (_env, client, organizer, _user_1, _user_2, _user_3) = setup_test();
-    client.contribute(&organizer, &0);
+    client.contribute(&organizer, &0i128);
 }
 
 #[test]
 #[should_panic(expected = "badamt")]
 fn test_withdraw_bad_amount() {
     let (_env, client, organizer, _user_1, _user_2, _user_3) = setup_test();
-    client.partial_withdraw(&organizer, &0);
+    client.partial_withdraw(&organizer, &0i128);
 }
 
 #[test]
