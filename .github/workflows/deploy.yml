@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build-and-deploy:
@@ -29,14 +26,25 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
-      - name: Build Smart Contract (Verification)
+      - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.76.0
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build & unit-test Soroban contract
+        working-directory: contracts/ajo-circle
         run: |
-          rustup target add wasm32-unknown-unknown
-          cd contracts/ajo-circle
           cargo build --target wasm32-unknown-unknown --release
+          cargo test --lib
 
       - name: Prisma Generate
         run: pnpm prisma generate
+
+      - name: Next.js build
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars-long
+        run: pnpm build
 
       - name: Deploy to Vercel
         if: github.event_name == 'push'

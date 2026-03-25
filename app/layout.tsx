@@ -1,8 +1,11 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { WalletProvider } from '@/lib/wallet-context'
+import { ThemeProvider } from '@/components/theme-provider'
+import { DesktopSidebar } from '@/components/layout/sidebar'
+import { Header } from '@/components/layout/header'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -30,11 +33,12 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({
@@ -43,12 +47,20 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <WalletProvider>
-          {children}
-          <Toaster />
-        </WalletProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <WalletProvider>
+            <div className="flex min-h-screen">
+              <DesktopSidebar />
+              <div className="flex flex-col flex-1 min-w-0">
+                <Header />
+                <main className="flex-1">{children}</main>
+              </div>
+            </div>
+            <Toaster />
+          </WalletProvider>
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>
