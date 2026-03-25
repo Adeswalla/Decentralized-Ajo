@@ -23,7 +23,7 @@ export const getStellarServer = () => {
 
 // Initialize Soroban RPC client
 export const getSorobanClient = () => {
-  return new (StellarSdk as any).SorobanRpc.Server(STELLAR_CONFIG.sorobanRpcUrl);
+  return new StellarSdk.SorobanRpc.Server(STELLAR_CONFIG.sorobanRpcUrl);
 };
 
 // Get network configuration
@@ -39,7 +39,7 @@ export const isValidStellarAddress = (address: string): boolean => {
   try {
     StellarSdk.StrKey.decodeEd25519PublicKey(address);
     return true;
-  } catch {
+  } catch (error) {
     return false;
   }
 };
