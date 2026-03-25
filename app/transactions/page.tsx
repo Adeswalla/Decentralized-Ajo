@@ -8,15 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowUpDown, ArrowLeft } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/auth-client';
-
-interface Transaction {
-  id: string;
-  amount: number;
-  round: number;
-  status: string;
-  createdAt: string;
-  circle: { id: string; name: string };
-}
+import { TransactionCard } from '@/components/transactions/transaction-card';
+import type { Transaction } from '@/components/transactions/transaction-card';
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive'> = {
   COMPLETED: 'default',
@@ -41,10 +34,7 @@ export default function TransactionsPage() {
     setLoading(true);
     try {
       const res = await authenticatedFetch(`/api/transactions?page=${p}&sortBy=${sb}&order=${o}`);
-      if (res.status === 401) {
-        router.push('/auth/login');
-        return;
-      }
+      if (res.status === 401) { router.push('/auth/login'); return; }
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTransactions(data.contributions);
@@ -62,7 +52,7 @@ export default function TransactionsPage() {
 
   const toggleSort = (col: 'createdAt' | 'amount') => {
     if (sortBy === col) {
-      setOrder((o: 'asc' | 'desc') => o === 'asc' ? 'desc' : 'asc');
+      setOrder((o) => o === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(col);
       setOrder('desc');
@@ -74,6 +64,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
@@ -93,59 +84,93 @@ export default function TransactionsPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <Button variant="ghost" size="sm" className="-ml-3" onClick={() => toggleSort('createdAt')}>
-                      Date <ArrowUpDown className="ml-1 h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead>Circle</TableHead>
-                  <TableHead>Round</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => toggleSort('amount')}>
-                      Amount <ArrowUpDown className="ml-1 h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.map((tx: Transaction) => (
-                  <TableRow key={tx.id}>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(tx.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Link href={`/circles/${tx.circle.id}`} className="hover:underline font-medium">
-                        {tx.circle.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">#{tx.round}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant[tx.status] ?? 'secondary'}>
-                        {tx.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {tx.amount.toFixed(2)} XLM
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          {/* ── Mobile: sort controls + card list ── */}
+          <div className="block md:hidden">
+            {/* Sort controls */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleSort('createdAt')}
+                className={sortBy === 'createdAt' ? 'font-semibold bg-accent' : ''}
+              >
+                Date <ArrowUpDown className="ml-1 h-3 w-3" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleSort('amount')}
+                className={sortBy === 'amount' ? 'font-semibold bg-accent' : ''}
+              >
+                Amount <ArrowUpDown className="ml-1 h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* Card list */}
+            <div className="space-y-3">
+              {transactions.map((tx) => (
+                <TransactionCard key={tx.id} transaction={tx} />
+              ))}
+            </div>
           </div>
 
+          {/* ── Desktop: table ── */}
+          <div className="hidden md:block">
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" className="-ml-3" onClick={() => toggleSort('createdAt')}>
+                        Date <ArrowUpDown className="ml-1 h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>Circle</TableHead>
+                    <TableHead>Round</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort('amount')}>
+                        Amount <ArrowUpDown className="ml-1 h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((tx) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(tx.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/circles/${tx.circle.id}`} className="hover:underline font-medium">
+                          {tx.circle.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">#{tx.round}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant[tx.status] ?? 'secondary'}>
+                          {tx.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {tx.amount.toFixed(2)} XLM
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* ── Pagination (shared) ── */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p: number) => p - 1)}>
+                <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
                   Previous
                 </Button>
-                <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p: number) => p + 1)}>
+                <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
                   Next
                 </Button>
               </div>
