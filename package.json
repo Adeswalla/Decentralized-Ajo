@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "echo \"No tests specified for frontend\" && exit 0"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
