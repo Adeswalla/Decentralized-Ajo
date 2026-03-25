@@ -6,23 +6,13 @@ import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { TransactionTable, type Transaction } from '@/components/transaction-table';
+import { authenticatedFetch } from '@/lib/auth-client';
 
-interface Transaction {
-  id: string;
-  amount: number;
-  round: number;
-  status: string;
-  createdAt: string;
-  circle: { id: string; name: string };
-}
+// The interface and statusVariant are no longer needed here 
+// because they are imported from '@/components/transaction-table'
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  COMPLETED: 'default',
-  PENDING: 'secondary',
-  FAILED: 'destructive',
-  REFUNDED: 'secondary',
-};
 
 export default function TransactionsPage() {
   const router = useRouter();
@@ -39,9 +29,11 @@ export default function TransactionsPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/transactions?page=${p}&sortBy=${sb}&order=${o}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authenticatedFetch(`/api/transactions?page=${p}&sortBy=${sb}&order=${o}`);
+      if (res.status === 401) {
+        router.push('/auth/login');
+        return;
+      }
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTransactions(data.contributions);

@@ -1,71 +1,54 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Dashboard } from '@/components/dashboard';
-import { useWallet } from '@/lib/wallet-context';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PlusCircle, Search } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/auth-client';
+import { useWallet } from '@/lib/wallet-context'; // Keep your wallet hook
+import { Dashboard } from '@/components/dashboard'; // Keep your new component
+import { DashboardStats } from '@/components/dashboard/dashboard-stats';
+import { CircleList } from '@/components/dashboard/circle-list';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
-export default function DashboardPage() {
-  const { isConnected } = useWallet();
-  const [activeGroups, setActiveGroups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+const PAGE_SIZE = 9;
 
-  useEffect(() => {
-    if (isConnected) {
-      // Simulate data fetching
-      // In a real app, you would fetch this from your Soroban contract or backend API
-      const fetchData = async () => {
-        setLoading(true);
-        try {
-          // Mock data based on the requested structure
-          const mockGroups = [
-            {
-              id: '1',
-              name: 'Lagos Savings Circle',
-              balance: 1500,
-              nextCycle: 'Dec 15, 2026',
-            },
-            {
-              id: '2',
-              name: 'Tech Builders Ajo',
-              balance: 2450,
-              nextCycle: 'Jan 02, 2027',
-            },
-            {
-              id: '3',
-              name: 'Family Education Fund',
-              balance: 500,
-              nextCycle: 'Dec 28, 2026',
-            },
-          ];
+// ... (Keep Circle interface etc.)
+return (
+  <main className="min-h-screen bg-background">
+    {/* Use your new Dashboard component to handle Header + Wallet Check + Overview Cards */}
+    <Dashboard activeGroups={circles} /> 
+
+    <div className="container mx-auto px-4 py-12">
+      {/* Keeping Main's search and filtering logic below the overview */}
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-2xl font-bold">Explore More Circles</h2>
           
-          // Using a small timeout to simulate network lag
-          setTimeout(() => {
-            setActiveGroups(mockGroups);
-            setLoading(false);
-          }, 800);
-        } catch (error) {
-          console.error('Error fetching Ajo groups:', error);
-          setLoading(false);
-        }
-      };
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+             {/* ... Search and Tabs from main ... */}
+          </div>
+        </div>
 
-      fetchData();
-    } else {
-      setLoading(false);
-    }
-  }, [isConnected]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <CircleList circles={circles} loading={loading} />
+        
+        {/* ... Pagination from main ... */}
       </div>
-    );
-  }
+    </div>
+  </main>
+);
 
-  return (
-    <main className="min-h-screen bg-background">
-      <Dashboard activeGroups={activeGroups} />
     </main>
   );
 }

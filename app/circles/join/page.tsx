@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { authenticatedFetch } from '@/lib/auth-client';
 
 interface CirclePreview {
   id: string;
@@ -57,9 +58,11 @@ function JoinCircleContent() {
         return;
       }
 
-      const res = await fetch(`/api/circles/${trimmed}/join`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authenticatedFetch(`/api/circles/${trimmed}/join`);
+      if (res.status === 401) {
+        router.push('/auth/login');
+        return;
+      }
 
       const data = await res.json();
 
@@ -93,10 +96,13 @@ function JoinCircleContent() {
         return;
       }
 
-      const res = await fetch(`/api/circles/${preview.id}/join`, {
+      const res = await authenticatedFetch(`/api/circles/${preview.id}/join`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401) {
+        router.push('/auth/login');
+        return;
+      }
 
       const data = await res.json();
 
