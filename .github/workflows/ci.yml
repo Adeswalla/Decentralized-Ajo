@@ -25,7 +25,7 @@ jobs:
         run: npm ci
 
       - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@1.76.0
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
