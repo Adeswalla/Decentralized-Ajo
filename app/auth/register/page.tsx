@@ -196,8 +196,8 @@ export default function RegisterPage() {
                 {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Creating account...' : 'Sign Up'}
+              <Button type="submit" className="w-full" isLoading={loading}>
+                Sign Up
               </Button>
             </form>
 

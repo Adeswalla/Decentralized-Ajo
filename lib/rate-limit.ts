@@ -20,9 +20,9 @@ export interface RateLimitConfig {
 /** Pre-configured limits for different route groups */
 export const RATE_LIMITS = {
   /** Tight limit for auth endpoints to slow brute-force attacks */
-  auth: { limit: 10, windowMs: 60_000 } satisfies RateLimitConfig,
+  auth: { limit: 10, windowMs: 15 * 60 * 1000 } satisfies RateLimitConfig,
   /** General API limit */
-  api: { limit: 60, windowMs: 60_000 } satisfies RateLimitConfig,
+  api: { limit: 100, windowMs: 15 * 60 * 1000 } satisfies RateLimitConfig,
 } as const;
 
 /**

@@ -165,8 +165,8 @@ function JoinCircleContent() {
                   disabled={previewing}
                 />
               </div>
-              <Button type="submit" disabled={!circleIdInput.trim() || previewing}>
-                {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Look Up'}
+              <Button type="submit" disabled={!circleIdInput.trim()} isLoading={previewing}>
+                Look Up
               </Button>
             </form>
 
@@ -242,15 +242,8 @@ function JoinCircleContent() {
                   This circle is not accepting new members.
                 </p>
               ) : (
-                <Button className="w-full" onClick={handleJoin} disabled={joining}>
-                  {joining ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Joining...
-                    </>
-                  ) : (
-                    'Confirm Join'
-                  )}
+                <Button className="w-full" onClick={handleJoin} isLoading={joining}>
+                  Confirm Join
                 </Button>
               )}
             </CardContent>

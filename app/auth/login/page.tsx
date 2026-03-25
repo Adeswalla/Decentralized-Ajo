@@ -142,8 +142,8 @@ export default function LoginPage() {
                 {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
+              <Button type="submit" className="w-full" isLoading={loading}>
+                Sign In
               </Button>
             </form>
 

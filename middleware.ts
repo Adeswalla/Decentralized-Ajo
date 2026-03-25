@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { checkRateLimit, RATE_LIMITS, getRateLimitKey } from '@/lib/rate-limit';
 
 const ALLOWED_METHODS = 'GET,POST,PUT,DELETE,OPTIONS';
 const ALLOWED_HEADERS = 'Content-Type,Authorization,x-request-id';
@@ -37,6 +38,43 @@ export function middleware(request: NextRequest) {
     preflight.headers.set('Access-Control-Allow-Credentials', 'true');
     preflight.headers.set('Access-Control-Max-Age', '86400');
     return preflight;
+  }
+
+  // ── Rate Limiting ───────────────────────────────────────────────────────────
+  if (nextUrl.pathname.startsWith('/api/')) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ?? '127.0.0.1';
+    
+    // Choose rate limit config based on path
+    const isAuthRoute = nextUrl.pathname.startsWith('/api/auth/');
+    const config = isAuthRoute ? RATE_LIMITS.auth : RATE_LIMITS.api;
+    const prefix = isAuthRoute ? 'auth' : 'api';
+    
+    const limitKey = getRateLimitKey(prefix, ip);
+    const limitResult = checkRateLimit(limitKey, config);
+
+    if (limitResult) {
+      console.warn(JSON.stringify({ 
+        requestId, 
+        method, 
+        url: nextUrl.pathname, 
+        type: 'rate_limit_exceeded', 
+        ip,
+        retryAfter: limitResult.retryAfter 
+      }));
+
+      return NextResponse.json(
+        { 
+          error: 'Too many requests; please try again later.',
+          retryAfter: limitResult.retryAfter
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': limitResult.retryAfter.toString(),
+          }
+        },
+      );
+    }
   }
 
   // ── Request logging ─────────────────────────────────────────────────────────

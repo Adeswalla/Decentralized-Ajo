@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTransactionSubmit } from '@/hooks/use-transaction-submit';
 import { useWallet } from '@/lib/wallet-context';
-import { Loader2 } from 'lucide-react';
 
 interface ContributeButtonProps {
   circleId: string;
@@ -87,10 +86,10 @@ export function ContributeButton({ circleId, amount, onSuccess }: ContributeButt
   return (
     <Button
       onClick={handleContribute}
-      disabled={!isConnected || isLoading}
+      disabled={!isConnected}
+      isLoading={isLoading}
       className="w-full"
     >
-      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
       {isBuilding && 'Building Transaction...'}
       {status === 'signing' && 'Waiting for Signature...'}
       {status === 'submitting' && 'Submitting...'}
