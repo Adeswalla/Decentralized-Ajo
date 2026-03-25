@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { STELLAR_CONFIG, isValidStellarAddress } from './stellar-config';
+import { authenticatedFetch } from './auth-client';
 
 interface WalletContextType {
   walletAddress: string | null;
@@ -77,11 +78,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          await fetch('/api/users/update-wallet', {
+          await authenticatedFetch('/api/users/update-wallet', {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
               walletAddress: pubKey,

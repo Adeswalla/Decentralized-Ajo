@@ -1,8 +1,12 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
+import { prisma } from '@/lib/prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this';
-const JWT_EXPIRATION = '7d';
+const JWT_EXPIRATION = '1h';
+const REFRESH_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+export const REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
 
 export interface JWTPayload {
   userId: string;
@@ -29,6 +33,63 @@ export function generateToken(payload: JWTPayload): string {
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRATION,
   });
+}
+
+export function getRefreshTokenExpiryDate(): Date {
+  return new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
+}
+
+export function isSecureCookieEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+export async function generateRefreshToken(userId: string): Promise<string> {
+  const token = crypto.randomUUID();
+  await prisma.refreshToken.create({
+    data: {
+      token,
+      userId,
+      expiresAt: getRefreshTokenExpiryDate(),
+    },
+  });
+  return token;
+}
+
+export async function rotateRefreshToken(token: string): Promise<{ token: string; userId: string } | null> {
+  const existingToken = await prisma.refreshToken.findUnique({
+    where: { token },
+    select: { token: true, userId: true, expiresAt: true },
+  });
+
+  if (!existingToken || existingToken.expiresAt <= new Date()) {
+    if (existingToken) {
+      await prisma.refreshToken.delete({ where: { token: existingToken.token } });
+    }
+    return null;
+  }
+
+  const newToken = crypto.randomUUID();
+
+  await prisma.$transaction([
+    prisma.refreshToken.delete({ where: { token: existingToken.token } }),
+    prisma.refreshToken.create({
+      data: {
+        token: newToken,
+        userId: existingToken.userId,
+        expiresAt: getRefreshTokenExpiryDate(),
+      },
+    }),
+  ]);
+
+  return { token: newToken, userId: existingToken.userId };
+}
+
+export async function revokeUserRefreshTokens(userId: string): Promise<void> {
+  await prisma.refreshToken.deleteMany({ where: { userId } });
+}
+
+export async function revokeRefreshToken(token: string): Promise<void> {
+  await prisma.refreshToken.deleteMany({ where: { token } });
 }
 
 // Verify JWT token

@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowUpDown, ArrowLeft } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/auth-client';
 
 interface Transaction {
   id: string;
@@ -39,9 +40,11 @@ export default function TransactionsPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/transactions?page=${p}&sortBy=${sb}&order=${o}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authenticatedFetch(`/api/transactions?page=${p}&sortBy=${sb}&order=${o}`);
+      if (res.status === 401) {
+        router.push('/auth/login');
+        return;
+      }
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTransactions(data.contributions);

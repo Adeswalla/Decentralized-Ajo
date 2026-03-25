@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Users, TrendingUp, Calendar, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { authenticatedFetch } from '@/lib/auth-client';
 
 interface Member {
   id: string;
@@ -85,11 +86,7 @@ export default function CircleDetailPage() {
         return;
       }
 
-      const response = await fetch(`/api/circles/${circleId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch(`/api/circles/${circleId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -98,6 +95,8 @@ export default function CircleDetailPage() {
         } else if (response.status === 403) {
           toast.error('You do not have access to this circle');
           router.push('/');
+        } else if (response.status === 401) {
+          router.push('/auth/login');
         }
         return;
       }
@@ -129,11 +128,10 @@ export default function CircleDetailPage() {
         return;
       }
 
-      const response = await fetch(`/api/circles/${circleId}/contribute`, {
+      const response = await authenticatedFetch(`/api/circles/${circleId}/contribute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           amount: parseFloat(contributionAmount),
@@ -141,6 +139,10 @@ export default function CircleDetailPage() {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/auth/login');
+          return;
+        }
         const data = await response.json();
         toast.error(data.error || 'Failed to contribute');
         return;
@@ -424,16 +426,22 @@ export default function CircleDetailPage() {
                   Vote on circle proposals and rule changes
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Governance features coming soon. Members will be able to vote on:
+                  Participate in governance by creating proposals and voting on circle decisions:
                 </p>
-                <ul className="list-disc list-inside text-muted-foreground mt-4 space-y-2">
+                <ul className="list-disc list-inside text-muted-foreground space-y-2">
                   <li>Circle rule changes</li>
                   <li>Member removal</li>
                   <li>Emergency payouts</li>
                   <li>Circle dissolution</li>
+                  <li>Contribution adjustments</li>
                 </ul>
+                <Button asChild className="w-full mt-4">
+                  <Link href={`/circles/${circle.id}/governance`}>
+                    View Governance & Proposals
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

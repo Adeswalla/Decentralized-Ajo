@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { authenticatedFetch, clearAuthState } from '@/lib/auth-client';
 
 const profileSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
@@ -43,15 +44,19 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
   const onSubmit = async (data: ProfileFormValues) => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/users/profile', {
+      const res = await authenticatedFetch('/api/users/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(data),
       });
+
+      if (res.status === 401) {
+        clearAuthState();
+        window.location.href = '/auth/login';
+        return;
+      }
 
       const json = await res.json();
 

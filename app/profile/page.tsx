@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, User } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProfileForm } from '@/components/profile-form';
+import { authenticatedFetch } from '@/lib/auth-client';
 
 interface UserProfile {
   id: string;
@@ -30,14 +31,12 @@ export default function ProfilePage() {
       router.push('/auth/login');
       return;
     }
-    fetchProfile(token);
+    fetchProfile();
   }, []);
 
-  const fetchProfile = async (token: string) => {
+  const fetchProfile = async () => {
     try {
-      const res = await fetch('/api/users/profile', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authenticatedFetch('/api/users/profile');
 
       if (!res.ok) {
         router.push('/auth/login');
