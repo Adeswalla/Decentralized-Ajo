@@ -24,7 +24,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups }) => {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] w-full animate-in fade-in zoom-in duration-500">
-        <div className="p-6 bg-blue-50 rounded-full text-blue-600 mb-6 border-4 border-blue-100">
+        <div className="p-6 bg-primary/10 rounded-full text-primary mb-6 border-4 border-primary/20">
           <Wallet size={48} />
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-3">Wallet Disconnected</h2>

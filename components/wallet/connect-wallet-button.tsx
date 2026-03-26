@@ -57,7 +57,7 @@ export function ConnectWalletButton() {
 
             {showNetworkWarning && (
               <div className="absolute top-full mt-2 right-0 z-50 w-64">
-                <Alert variant="destructive" className="bg-red-50 border-red-200">
+                <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-sm">
                     Wrong network! Please switch to Mainnet.
@@ -65,7 +65,7 @@ export function ConnectWalletButton() {
                       variant="link"
                       size="sm"
                       onClick={handleSwitchNetwork}
-                      className="text-red-600 h-auto p-0 ml-2"
+                      className="text-destructive h-auto p-0 ml-2"
                     >
                       Switch Now
                     </Button>

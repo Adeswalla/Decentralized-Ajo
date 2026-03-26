@@ -17,20 +17,20 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
   nextPayout,
 }) => {
   return (
-    <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500 overflow-hidden group">
+    <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-primary overflow-hidden group">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-xl font-bold group-hover:text-blue-600 transition-colors">
+          <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors">
             {title}
           </CardTitle>
-          <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100">
+          <Badge variant="secondary">
             Active
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-green-50 rounded-full text-green-600">
+          <div className="p-2 bg-primary/10 rounded-full text-primary">
             <TrendingUp size={18} />
           </div>
           <div>
@@ -44,7 +44,7 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-50 rounded-full text-orange-600">
+          <div className="p-2 bg-secondary/20 rounded-full text-secondary-foreground">
             <Calendar size={18} />
           </div>
           <div>
