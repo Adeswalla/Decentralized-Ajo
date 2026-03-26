@@ -12,6 +12,7 @@ node_modules/
 # Server build output
 server/dist/
 *.log
+logs/
 
 # Rust ignores
 target/

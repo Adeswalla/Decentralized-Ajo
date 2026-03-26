@@ -8,6 +8,9 @@ pub mod factory;
 #[cfg(test)]
 mod deposit_tests;
 
+#[cfg(test)]
+mod withdrawal_tests;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype,
     symbol_short, token, Address, Env, Map, Vec, Symbol
@@ -172,6 +175,18 @@ impl AjoCircle {
         standings.set(organizer.clone(), MemberStanding { missed_count: 0, is_active: true });
         env.storage().instance().set(&DataKey::Standings, &standings);
 
+        // Emit CircleCreated event
+        env.events().publish(
+            (symbol_short!("created"), organizer.clone()),
+            (
+                contribution_amount,
+                configured_max_members,
+                max_rounds,
+                frequency_days,
+                env.ledger().timestamp()
+            )
+        );
+
         Ok(())
     }
 
@@ -217,6 +232,21 @@ impl AjoCircle {
         env.storage().instance().set(&DataKey::Circle, &circle);
         env.storage().instance().set(&DataKey::Members, &members);
 
+        // Add member to standings
+        let mut standings: Map<Address, MemberStanding> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Standings)
+            .unwrap_or_else(|| Map::new(&env));
+        standings.set(new_member.clone(), MemberStanding { missed_count: 0, is_active: true });
+        env.storage().instance().set(&DataKey::Standings, &standings);
+
+        // Emit MemberJoined event
+        env.events().publish(
+            (symbol_short!("join"), new_member.clone()),
+            (circle.member_count, env.ledger().timestamp())
+        );
+
         Ok(())
     }
 
@@ -235,23 +265,51 @@ impl AjoCircle {
             .get(&DataKey::Circle)
             .ok_or(AjoError::NotFound)?;
 
+        // Enforce exact contribution amount — no partial or excess deposits
+        if amount != circle.contribution_amount {
+            return Err(AjoError::InvalidInput);
+        }
+
         let mut members: Map<Address, MemberData> = env
             .storage()
             .instance()
             .get(&DataKey::Members)
             .ok_or(AjoError::NotFound)?;
 
+        // Only registered members may contribute
         let mut member_data = members
             .get(member.clone())
             .ok_or(AjoError::NotFound)?;
 
+        // Block contributions once circle is full
+        if circle.member_count >= circle.max_members {
+            return Err(AjoError::CircleAtCapacity);
+        }
+
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&member, &env.current_contract_address(), &amount);
 
-        member_data.total_contributed += amount;
-        members.set(member, member_data);
-
+        member_data.total_contributed = member_data
+            .total_contributed
+            .checked_add(amount)
+            .ok_or(AjoError::ArithmeticOverflow)?;
+        members.set(member.clone(), member_data);
         env.storage().instance().set(&DataKey::Members, &members);
+
+        // Update total pool
+        let pool: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalPool)
+            .unwrap_or(0_i128);
+        let new_pool = pool.checked_add(amount).ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::TotalPool, &new_pool);
+
+        // Emit deposit event
+        env.events().publish(
+            (symbol_short!("deposit"), member.clone()),
+            amount,
+        );
 
         Ok(())
     }
@@ -295,6 +353,12 @@ impl AjoCircle {
         standings.set(member.clone(), standing);
         env.storage().instance().set(&DataKey::Standings, &standings);
 
+        // Emit MemberBooted event
+        env.events().publish(
+            (symbol_short!("booted"), member.clone()),
+            (admin.clone(), env.ledger().timestamp())
+        );
+
         Ok(())
     }
 
@@ -319,11 +383,26 @@ impl AjoCircle {
         Ok(())
     }
 
+    // ---------------- QUERIES ----------------
+    pub fn get_total_pool(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0_i128)
+    }
+
+    pub fn get_member_balance(env: Env, member: Address) -> Result<i128, AjoError> {
+        let members: Map<Address, MemberData> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Members)
+            .ok_or(AjoError::NotFound)?;
+        let data = members.get(member).ok_or(AjoError::NotFound)?;
+        Ok(data.total_contributed)
+    }
+
     // ---------------- PAYOUT ----------------
     pub fn claim_payout(
         env: Env,
         member: Address,
-        _cycle: u32,
+        cycle: u32,
     ) -> Result<i128, AjoError> {
 
         member.require_auth();
@@ -355,6 +434,221 @@ impl AjoCircle {
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&env.current_contract_address(), &member, &payout);
 
+        // Emit FundsWithdrawn event
+        env.events().publish(
+            (symbol_short!("withdraw"), member.clone()),
+            (payout, cycle, circle.current_round, env.ledger().timestamp())
+        );
+
         Ok(payout)
+    }
+
+    // ---------------- DEPOSIT (alias for contribute with fixed amount) ----------------
+    pub fn deposit(env: Env, member: Address) -> Result<(), AjoError> {
+        member.require_auth();
+
+        // Check if circle is panicked
+        let circle_status: Option<bool> = env.storage().instance().get(&DataKey::CircleStatus);
+        if let Some(true) = circle_status {
+            return Err(AjoError::CirclePanicked);
+        }
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        let mut members: Map<Address, MemberData> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Members)
+            .ok_or(AjoError::NotFound)?;
+
+        let mut member_data = members
+            .get(member.clone())
+            .ok_or(AjoError::NotFound)?;
+
+        // Check if member is disqualified
+        let standings: Map<Address, MemberStanding> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Standings)
+            .unwrap_or_else(|| Map::new(&env));
+
+        if let Some(standing) = standings.get(member.clone()) {
+            if !standing.is_active {
+                return Err(AjoError::Disqualified);
+            }
+            // Check if member has missed 3 contributions (auto-disqualify)
+            if standing.missed_count >= 3 {
+                return Err(AjoError::Disqualified);
+            }
+        }
+
+        // Transfer the contribution amount
+        let token_client = token::Client::new(&env, &circle.token_address);
+        token_client.transfer(&member, &env.current_contract_address(), &circle.contribution_amount);
+
+        // Update member data
+        member_data.total_contributed = member_data.total_contributed
+            .checked_add(circle.contribution_amount)
+            .ok_or(AjoError::ArithmeticOverflow)?;
+
+        members.set(member.clone(), member_data);
+        env.storage().instance().set(&DataKey::Members, &members);
+
+        // Update total pool
+        let current_pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
+        let new_pool = current_pool
+            .checked_add(circle.contribution_amount)
+            .ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::TotalPool, &new_pool);
+
+        // Update last deposit timestamp
+        let mut last_deposits: Map<Address, u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::LastDepositAt)
+            .unwrap_or_else(|| Map::new(&env));
+        last_deposits.set(member.clone(), env.ledger().timestamp());
+        env.storage().instance().set(&DataKey::LastDepositAt, &last_deposits);
+
+        // Reset missed count for this member
+        let mut updated_standings = standings;
+        if let Some(mut standing) = updated_standings.get(member.clone()) {
+            standing.missed_count = 0;
+            updated_standings.set(member.clone(), standing);
+            env.storage().instance().set(&DataKey::Standings, &updated_standings);
+        }
+
+        // Emit DepositReceived event
+        env.events().publish(
+            (symbol_short!("deposit"), member.clone()),
+            (circle.contribution_amount, circle.current_round, env.ledger().timestamp())
+        );
+
+        Ok(())
+    }
+
+    // ---------------- ENHANCED CONTRIBUTION WITH EVENTS ----------------
+    pub fn contribute(
+        env: Env,
+        member: Address,
+        amount: i128,
+    ) -> Result<(), AjoError> {
+
+        member.require_auth();
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        let mut members: Map<Address, MemberData> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Members)
+            .ok_or(AjoError::NotFound)?;
+
+        let mut member_data = members
+            .get(member.clone())
+            .ok_or(AjoError::NotFound)?;
+
+        let token_client = token::Client::new(&env, &circle.token_address);
+        token_client.transfer(&member, &env.current_contract_address(), &amount);
+
+        member_data.total_contributed += amount;
+        members.set(member.clone(), member_data);
+
+        env.storage().instance().set(&DataKey::Members, &members);
+
+        // Emit ContributionMade event
+        env.events().publish(
+            (symbol_short!("contrib"), member.clone()),
+            (amount, circle.current_round, env.ledger().timestamp())
+        );
+
+        Ok(())
+    }
+
+    // ---------------- ADMIN FUNCTIONS (continued) ----------------
+    pub fn add_member(env: Env, organizer: Address, new_member: Address) -> Result<(), AjoError> {
+        Self::join_circle(env, organizer, new_member)
+    }
+
+    pub fn slash_member(env: Env, admin: Address, member: Address) -> Result<(), AjoError> {
+        Self::require_admin(&env, &admin)?;
+
+        let mut standings: Map<Address, MemberStanding> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Standings)
+            .unwrap_or_else(|| Map::new(&env));
+
+        let mut standing = standings
+            .get(member.clone())
+            .unwrap_or(MemberStanding { missed_count: 0, is_active: true });
+
+        standing.missed_count += 1;
+
+        // Auto-disqualify after 3 missed contributions
+        if standing.missed_count >= 3 {
+            standing.is_active = false;
+        }
+
+        standings.set(member.clone(), standing);
+        env.storage().instance().set(&DataKey::Standings, &standings);
+
+        // Emit MemberSlashed event
+        env.events().publish(
+            (symbol_short!("slash"), member.clone()),
+            (standing.missed_count, standing.is_active)
+        );
+
+        Ok(())
+    }
+
+    pub fn panic(env: Env, admin: Address) -> Result<(), AjoError> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::CircleStatus, &true);
+
+        // Emit CirclePanicked event
+        env.events().publish(
+            (symbol_short!("panic"), admin.clone()),
+            env.ledger().timestamp()
+        );
+
+        Ok(())
+    }
+
+    // ---------------- GETTER FUNCTIONS ----------------
+    pub fn get_total_pool(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0)
+    }
+
+    pub fn get_member_balance(env: Env, member: Address) -> Result<MemberData, AjoError> {
+        let members: Map<Address, MemberData> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Members)
+            .ok_or(AjoError::NotFound)?;
+
+        members.get(member).ok_or(AjoError::NotFound)
+    }
+
+    pub fn get_last_deposit_timestamp(env: Env, member: Address) -> Result<u64, AjoError> {
+        let last_deposits: Map<Address, u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::LastDepositAt)
+            .unwrap_or_else(|| Map::new(&env));
+
+        last_deposits.get(member).ok_or(AjoError::NotFound)
+    }
+
+    pub fn get_circle_state(env: Env) -> Result<CircleData, AjoError> {
+        env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)
     }
 }

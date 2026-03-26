@@ -25,7 +25,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = fa
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] w-full animate-in fade-in zoom-in duration-500 px-4">
+      <div className="flex flex-col items-center justify-center min-h-[70vh] w-full animate-in fade-in zoom-in duration-500">
         <div className="p-6 bg-primary/10 rounded-full text-primary mb-6 border-4 border-primary/20">
           <Wallet size={48} />
         </div>

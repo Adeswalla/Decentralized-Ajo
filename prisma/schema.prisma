@@ -18,6 +18,7 @@ model User {
   // Wallet info
   walletAddress String? @unique
   nonce         String?
+  nonceExpiresAt DateTime?
   isWalletVerified Boolean @default(false)
   
   firstName String?
@@ -41,6 +42,7 @@ model User {
   withdrawals Withdrawal[]
   refreshTokens RefreshToken[]
   notifications Notification[]
+  ajoParticipations UserAjoParticipation[]
 }
 
 model RefreshToken {
@@ -81,6 +83,7 @@ model Circle {
   payments  PaymentSchedule[]
   governance GovernanceProposal[]
   withdrawals Withdrawal[]
+  ajoParticipants UserAjoParticipation[] @relation("ajoParticipants")
 
   @@index([organizerId])
   @@index([status])
@@ -291,6 +294,37 @@ model Session {
   expiresAt DateTime
   
   createdAt DateTime @default(now())
+}
+
+/// Off-chain participation record for Ajo groups (many-to-many: User <-> Circle).
+/// Mirrors on-chain membership events for consistency.
+model UserAjoParticipation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ajoId     String
+  ajo       Circle   @relation("ajoParticipants", fields: [ajoId], references: [id], onDelete: Cascade)
+
+  status    AjoParticipationStatus @default(PENDING)
+
+  /// Set when the join is confirmed on-chain (tx hash from the blockchain event)
+  onChainTxHash String?
+  /// Timestamp of the on-chain confirmation
+  confirmedAt   DateTime?
+
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  @@unique([userId, ajoId])
+  @@index([userId])
+  @@index([ajoId])
+  @@index([status])
+}
+
+enum AjoParticipationStatus {
+  PENDING    // joined off-chain, awaiting on-chain confirmation
+  CONFIRMED  // confirmed by on-chain event
+  EXITED     // user left the group
 }
 
 model Notification {
