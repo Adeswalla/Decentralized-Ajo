@@ -18,6 +18,7 @@ model User {
   // Wallet info
   walletAddress String? @unique
   nonce         String?
+  nonceExpiresAt DateTime?
   isWalletVerified Boolean @default(false)
   
   firstName String?
