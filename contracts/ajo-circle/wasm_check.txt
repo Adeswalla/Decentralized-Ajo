@@ -1,0 +1,291 @@
+﻿cargo :    Compiling 
+proc-macro2 v1.0.69
+At line:1 char:1
++ cargo check --target 
+wasm32-unknown-unknown 
+2>&1 | Out-File -Encoding 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (     
+  Compiling proc-macro2    
+ v1.0.69:String) [], Re    
+moteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+   Compiling unicode-ident 
+v1.0.24
+   Compiling serde v1.0.192
+   Compiling serde_json 
+v1.0.108
+   Compiling autocfg v1.5.0
+error: linking with 
+`link.exe` failed: exit 
+code: 1
+  |
+  = note: "link.exe" 
+"/NOLOGO" "C:\\Users\\hp\\A
+ppData\\Local\\Temp\\rustch
+iyJai\\symbols.o" "<2 
+object files omitted>" "C:\
+\Users\\hp\\.rustup\\toolch
+ains\\1.85.0-x86_64-pc-wind
+ows-msvc\\lib\\rustlib\\x86
+_64-pc-windows-msvc\\lib/{l
+ibstd-99a5467416e27682.rlib
+,libpanic_unwind-b2376f55ca
+9ba5db.rlib,libwindows_targ
+ets-e982c2634e026463.rlib,l
+ibrustc_demangle-622607d70f
+9500c2.rlib,libstd_detect-4
+02c0b1e8e67cb33.rlib,libhas
+hbrown-d36035ae19bb0c8b.rli
+b,librustc_std_workspace_al
+loc-cb12c14614b55d43.rlib,l
+ibunwind-8e666946f8f5db2b.r
+lib,libcfg_if-ac9947000bdc1
+69e.rlib,liballoc-4f54ad4ac
+4b0f4c5.rlib,librustc_std_w
+orkspace_core-ff8db640d177e
+d2a.rlib,libcore-745ff350a5
+4e4299.rlib,libcompiler_bui
+ltins-b2f39c5f2779068f.rlib
+}" "kernel32.lib" 
+"kernel32.lib" 
+"advapi32.lib" "ntdll.lib" 
+"userenv.lib" "ws2_32.lib" 
+"dbghelp.lib" 
+"/defaultlib:msvcrt" 
+"/NXCOMPAT" "/OUT:C:\\Users
+\\hp\\Documents\\Adeswalla\
+\Decentralized-Ajo\\contrac
+ts\\ajo-circle\\target\\deb
+ug\\build\\serde_json-16231
+18e31498245\\build_script_b
+uild-1623118e31498245.exe" 
+"/OPT:REF,NOICF" "/DEBUG" 
+"/PDBALTPATH:%_PDB%" "/NATV
+IS:C:\\Users\\hp\\.rustup\\
+toolchains\\1.85.0-x86_64-p
+c-windows-msvc\\lib\\rustli
+b\\etc\\intrinsic.natvis" "
+/NATVIS:C:\\Users\\hp\\.rus
+tup\\toolchains\\1.85.0-x86
+_64-pc-windows-msvc\\lib\\r
+ustlib\\etc\\liballoc.natvi
+s" "/NATVIS:C:\\Users\\hp\\
+.rustup\\toolchains\\1.85.0
+-x86_64-pc-windows-msvc\\li
+b\\rustlib\\etc\\libcore.na
+tvis" "/NATVIS:C:\\Users\\h
+p\\.rustup\\toolchains\\1.8
+5.0-x86_64-pc-windows-msvc\
+\lib\\rustlib\\etc\\libstd.
+natvis"
+  = note: some arguments 
+are omitted. use 
+`--verbose` to show all 
+linker arguments
+  = note: link: extra 
+operand 'C:\\Users\\hp\\Doc
+uments\\Adeswalla\\Decentra
+lized-Ajo\\contracts\\ajo-c
+ircle\\target\\debug\\build
+\\serde_json-1623118e314982
+45\\build_script_build-1623
+118e31498245.build_script_b
+uild.b57348f4ea85bf6f-cgu.0
+.rcgu.o'
+          Try 'link 
+--help' for more 
+information.
+          
+
+note: `link.exe` returned 
+an unexpected error
+
+note: in the Visual Studio 
+installer, ensure the "C++ 
+build tools" workload is 
+selected
+
+error: could not compile 
+`serde_json` (build 
+script) due to 1 previous 
+error
+warning: build failed, 
+waiting for other jobs to 
+finish...
+error: linking with 
+`link.exe` failed: exit 
+code: 1
+  |
+  = note: "link.exe" 
+"/NOLOGO" "C:\\Users\\hp\\A
+ppData\\Local\\Temp\\rustce
+ula7N\\symbols.o" "<2 
+object files omitted>" "C:\
+\Users\\hp\\.rustup\\toolch
+ains\\1.85.0-x86_64-pc-wind
+ows-msvc\\lib\\rustlib\\x86
+_64-pc-windows-msvc\\lib/{l
+ibstd-99a5467416e27682.rlib
+,libpanic_unwind-b2376f55ca
+9ba5db.rlib,libwindows_targ
+ets-e982c2634e026463.rlib,l
+ibrustc_demangle-622607d70f
+9500c2.rlib,libstd_detect-4
+02c0b1e8e67cb33.rlib,libhas
+hbrown-d36035ae19bb0c8b.rli
+b,librustc_std_workspace_al
+loc-cb12c14614b55d43.rlib,l
+ibunwind-8e666946f8f5db2b.r
+lib,libcfg_if-ac9947000bdc1
+69e.rlib,liballoc-4f54ad4ac
+4b0f4c5.rlib,librustc_std_w
+orkspace_core-ff8db640d177e
+d2a.rlib,libcore-745ff350a5
+4e4299.rlib,libcompiler_bui
+ltins-b2f39c5f2779068f.rlib
+}" "kernel32.lib" 
+"kernel32.lib" 
+"advapi32.lib" "ntdll.lib" 
+"userenv.lib" "ws2_32.lib" 
+"dbghelp.lib" 
+"/defaultlib:msvcrt" 
+"/NXCOMPAT" "/OUT:C:\\Users
+\\hp\\Documents\\Adeswalla\
+\Decentralized-Ajo\\contrac
+ts\\ajo-circle\\target\\deb
+ug\\build\\serde-631abbe2eb
+213eb5\\build_script_build-
+631abbe2eb213eb5.exe" 
+"/OPT:REF,NOICF" "/DEBUG" 
+"/PDBALTPATH:%_PDB%" "/NATV
+IS:C:\\Users\\hp\\.rustup\\
+toolchains\\1.85.0-x86_64-p
+c-windows-msvc\\lib\\rustli
+b\\etc\\intrinsic.natvis" "
+/NATVIS:C:\\Users\\hp\\.rus
+tup\\toolchains\\1.85.0-x86
+_64-pc-windows-msvc\\lib\\r
+ustlib\\etc\\liballoc.natvi
+s" "/NATVIS:C:\\Users\\hp\\
+.rustup\\toolchains\\1.85.0
+-x86_64-pc-windows-msvc\\li
+b\\rustlib\\etc\\libcore.na
+tvis" "/NATVIS:C:\\Users\\h
+p\\.rustup\\toolchains\\1.8
+5.0-x86_64-pc-windows-msvc\
+\lib\\rustlib\\etc\\libstd.
+natvis"
+  = note: some arguments 
+are omitted. use 
+`--verbose` to show all 
+linker arguments
+  = note: link: extra 
+operand 'C:\\Users\\hp\\Doc
+uments\\Adeswalla\\Decentra
+lized-Ajo\\contracts\\ajo-c
+ircle\\target\\debug\\build
+\\serde-631abbe2eb213eb5\\b
+uild_script_build-631abbe2e
+b213eb5.build_script_build.
+d99f7e24d0279453-cgu.0.rcgu
+.o'
+          Try 'link 
+--help' for more 
+information.
+          
+
+error: could not compile 
+`serde` (build script) due 
+to 1 previous error
+error: linking with 
+`link.exe` failed: exit 
+code: 1
+  |
+  = note: "link.exe" 
+"/NOLOGO" "C:\\Users\\hp\\A
+ppData\\Local\\Temp\\rustcm
+aEaNd\\symbols.o" "<4 
+object files omitted>" "C:\
+\Users\\hp\\.rustup\\toolch
+ains\\1.85.0-x86_64-pc-wind
+ows-msvc\\lib\\rustlib\\x86
+_64-pc-windows-msvc\\lib/{l
+ibstd-99a5467416e27682.rlib
+,libpanic_unwind-b2376f55ca
+9ba5db.rlib,libwindows_targ
+ets-e982c2634e026463.rlib,l
+ibrustc_demangle-622607d70f
+9500c2.rlib,libstd_detect-4
+02c0b1e8e67cb33.rlib,libhas
+hbrown-d36035ae19bb0c8b.rli
+b,librustc_std_workspace_al
+loc-cb12c14614b55d43.rlib,l
+ibunwind-8e666946f8f5db2b.r
+lib,libcfg_if-ac9947000bdc1
+69e.rlib,liballoc-4f54ad4ac
+4b0f4c5.rlib,librustc_std_w
+orkspace_core-ff8db640d177e
+d2a.rlib,libcore-745ff350a5
+4e4299.rlib,libcompiler_bui
+ltins-b2f39c5f2779068f.rlib
+}" "kernel32.lib" 
+"kernel32.lib" 
+"advapi32.lib" "ntdll.lib" 
+"userenv.lib" "ws2_32.lib" 
+"dbghelp.lib" 
+"/defaultlib:msvcrt" 
+"/NXCOMPAT" "/OUT:C:\\Users
+\\hp\\Documents\\Adeswalla\
+\Decentralized-Ajo\\contrac
+ts\\ajo-circle\\target\\deb
+ug\\build\\proc-macro2-e763
+0c1e9c268696\\build_script_
+build-e7630c1e9c268696.exe"
+ "/OPT:REF,NOICF" "/DEBUG" 
+"/PDBALTPATH:%_PDB%" "/NATV
+IS:C:\\Users\\hp\\.rustup\\
+toolchains\\1.85.0-x86_64-p
+c-windows-msvc\\lib\\rustli
+b\\etc\\intrinsic.natvis" "
+/NATVIS:C:\\Users\\hp\\.rus
+tup\\toolchains\\1.85.0-x86
+_64-pc-windows-msvc\\lib\\r
+ustlib\\etc\\liballoc.natvi
+s" "/NATVIS:C:\\Users\\hp\\
+.rustup\\toolchains\\1.85.0
+-x86_64-pc-windows-msvc\\li
+b\\rustlib\\etc\\libcore.na
+tvis" "/NATVIS:C:\\Users\\h
+p\\.rustup\\toolchains\\1.8
+5.0-x86_64-pc-windows-msvc\
+\lib\\rustlib\\etc\\libstd.
+natvis"
+  = note: some arguments 
+are omitted. use 
+`--verbose` to show all 
+linker arguments
+  = note: link: extra 
+operand 'C:\\Users\\hp\\Doc
+uments\\Adeswalla\\Decentra
+lized-Ajo\\contracts\\ajo-c
+ircle\\target\\debug\\build
+\\proc-macro2-e7630c1e9c268
+696\\build_script_build-e76
+30c1e9c268696.build_script_
+build.8bf901d56fb78a88-cgu.
+0.rcgu.o'
+          Try 'link 
+--help' for more 
+information.
+          
+
+error: could not compile 
+`proc-macro2` (build 
+script) due to 1 previous 
+error

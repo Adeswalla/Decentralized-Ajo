@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { TransactionTable, type Transaction } from '@/components/transaction-table';
@@ -79,12 +82,50 @@ export default function TransactionsPage() {
         </div>
       ) : (
         <>
-          <TransactionTable 
-            transactions={transactions} 
-            onSort={toggleSort}
-            sortBy={sortBy}
-            order={order}
-          />
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" className="-ml-3" onClick={() => toggleSort('createdAt')}>
+                      Date <ArrowUpDown className="ml-1 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Circle</TableHead>
+                  <TableHead>Round</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => toggleSort('amount')}>
+                      Amount <ArrowUpDown className="ml-1 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((tx: Transaction) => (
+                  <TableRow key={tx.id}>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(tx.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Link href={`/circles/${tx.circle.id}`} className="hover:underline font-medium">
+                        {tx.circle.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">#{tx.round}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant[tx.status] ?? 'secondary'}>
+                        {tx.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {tx.amount.toFixed(2)} XLM
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">

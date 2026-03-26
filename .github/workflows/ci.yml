@@ -15,10 +15,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+        node-version: 20
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -44,7 +47,9 @@ jobs:
 
       - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@1.85.0
+
         with:
+          toolchain: 1.85.0
           targets: wasm32-unknown-unknown
 
       - name: Build & unit-test Soroban contract
@@ -54,10 +59,10 @@ jobs:
           cargo test --lib
 
       - name: Prisma Generate
-        run: npx prisma generate
+        run: pnpm prisma generate
 
       - name: Next.js build
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
           JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars-long
-        run: npm run build
+        run: pnpm build
