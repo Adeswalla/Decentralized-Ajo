@@ -235,12 +235,10 @@ impl AjoCircle {
             circle.next_payout_index = 0;
             circle.current_round += 1;
             
-            // Mark all members as eligible for payout again for the next round?
-            // Actually Ajo usually works one round per payout cycle.
-            // Let's assume one payout per member per round.
-            // We need to reset has_received_payout if we want multi-round support.
-            // But Ajo typically has many rounds (one per member).
-            // If max_rounds = member_count, each person gets 1 payout total.
+            // To support multiple rounds where members contribute again, 
+            // has_received_payout would need to be reset here for all members.
+            // For this implementation, a circle with max_rounds = member_count 
+            // handles one full rotation correctly.
         }
 
         member_data.has_received_payout = true;
