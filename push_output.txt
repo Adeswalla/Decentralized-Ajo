@@ -1,0 +1,6 @@
+warning: in the working copy of 'contracts/ajo-circle/src/test.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'push.bat', LF will be replaced by CRLF the next time Git touches it
+[fixed-branch 7b68115] Fix CI Soroban integer type inference & Vercel PR deploys
+ 4 files changed, 20 insertions(+), 21 deletions(-)
+To https://github.com/N-thnI/Decentralized-Ajo.git
+   73911df..7b68115  fixed-branch -> fixed-branch

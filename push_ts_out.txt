@@ -1,0 +1,51 @@
+warning: in the working copy of 'push_output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'branches.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'branches_output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'build_out.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'clean.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'clean_output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'conflict_out.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'final_sync.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'final_sync_out.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'fix_conflict.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ls_github.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ls_out.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'pull.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'pull_output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'push_ts_fixes.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resolving.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resolving_output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'run_tsc.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test_build.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tsc_output.txt', LF will be replaced by CRLF the next time Git touches it
+[fixed-branch 270d1eb] fix: resolve Next.js TypeScript compilation errors
+ 24 files changed, 260 insertions(+), 6 deletions(-)
+ create mode 100644 branches.bat
+ create mode 100644 branches_output.txt
+ create mode 100644 build_out.txt
+ create mode 100644 clean.bat
+ create mode 100644 clean_output.txt
+ create mode 100644 conflict_out.txt
+ create mode 100644 final_sync.bat
+ create mode 100644 final_sync_out.txt
+ create mode 100644 fix_conflict.bat
+ create mode 100644 ls_github.bat
+ create mode 100644 ls_out.txt
+ create mode 100644 pull.bat
+ create mode 100644 pull_output.txt
+ create mode 100644 push_ts_fixes.bat
+ create mode 100644 push_ts_out.txt
+ create mode 100644 resolving.bat
+ create mode 100644 resolving_output.txt
+ create mode 100644 run_tsc.bat
+ create mode 100644 test_build.bat
+ create mode 100644 tsc_output.txt
+ create mode 100644 tsconfig.tsbuildinfo
+To https://github.com/N-thnI/Decentralized-Ajo.git
+ ! [rejected]        fixed-branch -> fixed-branch (fetch first)
+error: failed to push some refs to 'https://github.com/N-thnI/Decentralized-Ajo.git'
+hint: Updates were rejected because the remote contains work that you do not
+hint: have locally. This is usually caused by another repository pushing to
+hint: the same ref. If you want to integrate the remote changes, use
+hint: 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.

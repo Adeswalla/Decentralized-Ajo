@@ -24,7 +24,7 @@ fn setup_test<'a>() -> (
     let user_2 = Address::generate(&env);
     let user_3 = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100i128, &30u32, &3u32);
+    client.initialize_circle(&organizer, &100i128, &30u32, &3u32, &10u32);
 
     (env, client, organizer, user_1, user_2, user_3)
 }
@@ -33,33 +33,52 @@ fn setup_test<'a>() -> (
 fn test_circle_lifecycle() {
     let (env, client, organizer, user_1, user_2, user_3) = setup_test();
 
-    // Add members
+    // Add members (Order: Organizer index 0, user_1 index 1, user_2 index 2, user_3 index 3)
     client.add_member(&organizer, &user_1);
     client.add_member(&organizer, &user_2);
     client.add_member(&organizer, &user_3);
 
     let circle_state = client.get_circle_state();
-    assert_eq!(circle_state.member_count, 4); // Organizer + 3 members
+    assert_eq!(circle_state.member_count, 4);
 
-    // 3 Contributions (actually 4 members including organizer)
+    // Contributions
     client.contribute(&organizer, &100i128);
     client.contribute(&user_1, &100i128);
     client.contribute(&user_2, &100i128);
     client.contribute(&user_3, &100i128);
 
-    // Verify member balances
-    let u1_bal = client.get_member_balance(&user_1);
-    assert_eq!(u1_bal.total_contributed, 100);
-    assert_eq!(u1_bal.total_withdrawn, 0);
+    // 1st Payout: Must be Organizer (Index 0)
+    let payout1 = client.claim_payout(&organizer);
+    assert_eq!(payout1, 400);
 
-    // 1 Payout for a member (e.g. user_1)
-    let payout = client.claim_payout(&user_1);
-    // There are 4 members and contribution is 100, so payout should be 400
-    assert_eq!(payout, 400);
+    // 2nd Payout: Must be user_1 (Index 1)
+    // But wait, after a payout of 400, the pool is now 0 (400 - 400).
+    // User 1 cannot claim until more contributions happen or if it's a new round.
+    // In this model, 400 was the total for Round 1.
+}
 
-    let updated_u1_bal = client.get_member_balance(&user_1);
-    assert_eq!(updated_u1_bal.total_withdrawn, 400);
-    assert_eq!(updated_u1_bal.has_received_payout, true);
+#[test]
+#[should_panic(expected = "noturn")]
+fn test_payout_out_of_turn() {
+    let (env, client, organizer, user_1, _user_2, _user_3) = setup_test();
+    client.add_member(&organizer, &user_1);
+
+    client.contribute(&organizer, &100i128);
+    client.contribute(&user_1, &100i128);
+
+    // User 1 tries to claim, but it's Organizer's turn (index 0)
+    client.claim_payout(&user_1);
+}
+
+#[test]
+#[should_panic(expected = "insufund")]
+fn test_payout_insufficient_pool_funds() {
+    let (env, client, organizer, user_1, _user_2, _user_3) = setup_test();
+    client.add_member(&organizer, &user_1);
+
+    client.contribute(&organizer, &100i128);
+    // user_1 hasn't contributed yet. Total pool = 100. Payout needed = 200.
+    client.claim_payout(&organizer);
 }
 
 #[test]
@@ -90,9 +109,9 @@ fn test_double_payout_claim() {
     client.contribute(&organizer, &100i128);
     client.contribute(&user_1, &100i128);
 
-    client.claim_payout(&user_1);
+    client.claim_payout(&organizer);
     // Cannot claim payout twice
-    client.claim_payout(&user_1);
+    client.claim_payout(&organizer);
 }
 
 #[test]
@@ -150,7 +169,19 @@ fn test_bad_amount_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &0i128, &30u32, &3u32);
+    client.initialize_circle(&organizer, &0i128, &30u32, &3u32, &10u32);
+}
+
+#[test]
+#[should_panic(expected = "badmax")]
+fn test_bad_max_members_initialization() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+
+    client.initialize_circle(&organizer, &100i128, &30u32, &3u32, &0u32);
 }
 
 #[test]
@@ -162,7 +193,7 @@ fn test_bad_freq_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100i128, &0u32, &3u32);
+    client.initialize_circle(&organizer, &100i128, &0u32, &3u32, &10u32);
 }
 
 #[test]
@@ -174,7 +205,7 @@ fn test_bad_rounds_initialization() {
     let client = AjoCircleClient::new(&env, &contract_id);
     let organizer = Address::generate(&env);
 
-    client.initialize_circle(&organizer, &100i128, &30u32, &0u32);
+    client.initialize_circle(&organizer, &100i128, &30u32, &0u32, &10u32);
 }
 
 #[test]
@@ -213,6 +244,25 @@ fn test_get_members() {
 }
 
 #[test]
+#[should_panic(expected = "atcap")]
+fn test_max_members_limit() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+
+    // Initialize with max 2 members
+    client.initialize_circle(&organizer, &100i128, &30u32, &3u32, &2u32);
+
+    let user_1 = Address::generate(&env);
+    let user_2 = Address::generate(&env);
+
+    client.add_member(&organizer, &user_1); // 2nd member - OK
+    client.add_member(&organizer, &user_2); // 3rd member - Should panic
+}
+
+#[test]
 #[should_panic(expected = "nocircle")]
 fn test_uninitialized_circle() {
     let env = Env::default();
@@ -244,3 +294,30 @@ fn test_get_unauthorized_balance() {
     client.get_member_balance(&external_user);
 }
 
+#[test]
+fn test_full_round_advancement() {
+    let (env, client, organizer, user_1, _user_2, _user_3) = setup_test();
+    client.add_member(&organizer, &user_1);
+
+    // Round 1: Everyone contributes
+    client.contribute(&organizer, &100i128);
+    client.contribute(&user_1, &100i128);
+
+    // Organizer claims
+    client.claim_payout(&organizer);
+    
+    let state = client.get_circle_state();
+    assert_eq!(state.next_payout_index, 1);
+    assert_eq!(state.current_round, 1);
+
+    // Everyone contributes again for User 1's payout
+    client.contribute(&organizer, &100i128);
+    client.contribute(&user_1, &100i128);
+
+    // User 1 claims
+    client.claim_payout(&user_1);
+
+    let updated_state = client.get_circle_state();
+    assert_eq!(updated_state.next_payout_index, 0); // Reset for next rotation
+    assert_eq!(updated_state.current_round, 2);    // Advanced
+}

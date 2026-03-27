@@ -4,14 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Users, TrendingUp, Calendar, Coins } from 'lucide-react';
-import { toast } from 'sonner';
-import { authenticatedFetch } from '@/lib/auth-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AdminPanel } from './components/admin-panel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Users, TrendingUp, Calendar, Send } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Member {
   id: string;
@@ -26,7 +22,6 @@ interface Member {
     email: string;
     firstName?: string;
     lastName?: string;
-    walletAddress?: string;
   };
 }
 
@@ -36,8 +31,6 @@ interface Contribution {
   round: number;
   status: string;
   createdAt: string;
-  completedAt?: string;
-  txHash?: string;
   user: {
     id: string;
     firstName?: string;
@@ -55,8 +48,6 @@ interface Circle {
   maxRounds: number;
   currentRound: number;
   status: string;
-  contractAddress?: string;
-  contractDeployed: boolean;
   members: Member[];
   contributions: Contribution[];
   organizer: {
@@ -65,47 +56,6 @@ interface Circle {
     firstName?: string;
     lastName?: string;
   };
-}
-
-function DetailSkeleton() {
-  return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <Skeleton className="h-4 w-32 mb-4" />
-          <Skeleton className="h-8 w-64 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-      </header>
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-        <Skeleton className="h-96" />
-      </div>
-    </main>
-  );
-}
-
-function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'ACTIVE':
-      return 'default';
-    case 'PENDING':
-      return 'secondary';
-    case 'COMPLETED':
-      return 'outline';
-    case 'CANCELLED':
-      return 'destructive';
-    default:
-      return 'secondary';
-  }
-}
-
-function formatXLM(n: number): string {
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 7 }) : '0';
 }
 
 export default function CircleDetailPage() {
@@ -135,7 +85,11 @@ export default function CircleDetailPage() {
         return;
       }
 
-      const response = await authenticatedFetch(`/api/circles/${circleId}`);
+      const response = await fetch(`/api/circles/${circleId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -144,8 +98,6 @@ export default function CircleDetailPage() {
         } else if (response.status === 403) {
           toast.error('You do not have access to this circle');
           router.push('/');
-        } else if (response.status === 401) {
-          router.push('/auth/login');
         }
         return;
       }
@@ -162,35 +114,57 @@ export default function CircleDetailPage() {
 
   const handleContribute = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(contributionAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Enter a valid amount');
+
+    if (!contributionAmount || parseFloat(contributionAmount) <= 0) {
+      toast.error('Please enter a valid contribution amount');
       return;
     }
+
     setSubmittingContribution(true);
+
     try {
-      const res = await authenticatedFetch(`/api/circles/${circleId}/contribute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error((json as { error?: string }).error ?? 'Contribution failed');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/auth/login');
         return;
       }
-      toast.success('Contribution recorded');
+
+      const response = await fetch(`/api/circles/${circleId}/contribute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: parseFloat(contributionAmount),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to contribute');
+        return;
+      }
+
+      toast.success('Contribution recorded successfully!');
       setContributionAmount('');
-      await fetchCircle();
-    } catch {
-      toast.error('Contribution failed');
+      fetchCircle();
+    } catch (error) {
+      console.error('Error contributing:', error);
+      toast.error('An error occurred while processing your contribution');
     } finally {
       setSubmittingContribution(false);
     }
   };
 
   if (loading) {
-    return <DetailSkeleton />;
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-12 text-center">
+          <p className="text-muted-foreground">Loading circle...</p>
+        </div>
+      </main>
+    );
   }
 
   if (!circle) {
@@ -208,7 +182,6 @@ export default function CircleDetailPage() {
 
   const isOrganizer = currentUser?.id === circle.organizerId;
   const isMember = circle.members.some((m) => m.userId === currentUser?.id);
-  const totalPot = circle.members.length * circle.contributionAmount * circle.currentRound;
 
   return (
     <main className="min-h-screen bg-background">
@@ -219,75 +192,78 @@ export default function CircleDetailPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard
           </Link>
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-foreground">{circle.name}</h1>
-                <Badge variant={getStatusVariant(circle.status)}>
-                  {circle.status}
-                </Badge>
-              </div>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">{circle.name}</h1>
               {circle.description && (
                 <p className="text-muted-foreground mt-2">{circle.description}</p>
               )}
             </div>
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Current Pot</p>
-              <p className="text-3xl font-bold text-primary">{formatXLM(totalPot)} XLM</p>
+            <div>
+              <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-primary/10 text-primary">
+                {circle.status}
+              </span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Stats Bar */}
-      <div className="border-b border-border bg-muted/30">
-        <div className="container mx-auto px-4 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-center gap-3">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Members</p>
-                <p className="text-lg font-bold">{circle.members.length}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Calendar className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Round</p>
-                <p className="text-lg font-bold">
-                  {circle.currentRound} / {circle.maxRounds}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <TrendingUp className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Per Round</p>
-                <p className="text-lg font-bold">{formatXLM(circle.contributionAmount)} XLM</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Coins className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Payout</p>
-                <p className="text-lg font-bold">
-                  {formatXLM(circle.contributionAmount * circle.members.length)} XLM
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-12">
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Members</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{circle.members.length}</div>
+            </CardContent>
+          </Card>
 
-      <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Current Round</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {circle.currentRound} / {circle.maxRounds}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Per Contribution</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{circle.contributionAmount} XLM</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Payout Amount</CardTitle>
+              <Send className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {(circle.contributionAmount * circle.members.length).toFixed(2)} XLM
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Tabs */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className={`grid w-full ${isOrganizer ? 'grid-cols-5' : 'grid-cols-4'}`}>
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="contributions">Contributions</TabsTrigger>
             <TabsTrigger value="governance">Governance</TabsTrigger>
-            {isOrganizer && <TabsTrigger value="admin">Admin</TabsTrigger>}
           </TabsList>
 
           {/* Overview Tab */}
@@ -448,37 +424,19 @@ export default function CircleDetailPage() {
                   Vote on circle proposals and rule changes
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <p className="text-muted-foreground">
-                  Participate in governance by creating proposals and voting on circle decisions:
+                  Governance features coming soon. Members will be able to vote on:
                 </p>
-                <ul className="list-disc list-inside text-muted-foreground space-y-2">
+                <ul className="list-disc list-inside text-muted-foreground mt-4 space-y-2">
                   <li>Circle rule changes</li>
                   <li>Member removal</li>
                   <li>Emergency payouts</li>
                   <li>Circle dissolution</li>
-                  <li>Contribution adjustments</li>
                 </ul>
-                <Button asChild className="w-full mt-4">
-                  <Link href={`/circles/${circle.id}/governance`}>
-                    View Governance & Proposals
-                  </Link>
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>
-
-          {/* Admin Tab - Only visible to organizer */}
-          {isOrganizer && (
-            <TabsContent value="admin">
-              <AdminPanel
-                circleId={circle.id}
-                circle={circle}
-                currentUserId={currentUser?.id}
-                onUpdate={fetchCircle}
-              />
-            </TabsContent>
-          )}
         </Tabs>
       </div>
     </main>

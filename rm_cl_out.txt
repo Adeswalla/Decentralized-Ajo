@@ -1,0 +1,6 @@
+rm 'contracts/ajo-circle/Cargo.lock'
+[fixed-branch a65ecaa] fix: remove Cargo.lock to prevent version 4 CI parser errors
+ 1 file changed, 1466 deletions(-)
+ delete mode 100644 contracts/ajo-circle/Cargo.lock
+To https://github.com/N-thnI/Decentralized-Ajo.git
+   2ff7298..a65ecaa  fixed-branch -> fixed-branch

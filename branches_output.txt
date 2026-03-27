@@ -1,0 +1,20 @@
+  origin/HEAD -> origin/main
+  origin/fixed-branch
+  origin/main
+  origin/my-new-branch
+* remote origin
+  Fetch URL: https://github.com/N-thnI/Decentralized-Ajo.git
+  Push  URL: https://github.com/N-thnI/Decentralized-Ajo.git
+  HEAD branch: main
+  Remote branches:
+    fixed-branch  tracked
+    main          tracked
+    my-new-branch tracked
+  Local branches configured for 'git pull':
+    fixed-branch  merges with remote fixed-branch
+    main          merges with remote main
+    my-new-branch merges with remote my-new-branch
+  Local refs configured for 'git push':
+    fixed-branch  pushes to fixed-branch  (up to date)
+    main          pushes to main          (up to date)
+    my-new-branch pushes to my-new-branch (up to date)

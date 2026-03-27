@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, PlusCircle, Wallet, TrendingUp, CircleDot, ArrowRight } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { authenticatedFetch } from '@/lib/auth-client';
 
 interface Circle {
   id: string;
@@ -19,15 +17,11 @@ interface Circle {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [circles, setCircles] = useState<Circle[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
-  
-  // Search and Filtering State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -43,12 +37,16 @@ export default function Home() {
       setUserName(userData.firstName || userData.email);
     }
 
-    fetchCircles();
+    fetchCircles(token);
   }, []);
 
-  const fetchCircles = async () => {
+  const fetchCircles = async (token: string) => {
     try {
-      const response = await authenticatedFetch('/api/circles');
+      const response = await fetch('/api/circles', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setCircles(data.circles || []);
@@ -126,34 +124,59 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* Circles List Section */}
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold">Your Ajo Circles</h2>
-            
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search circles..."
-                  className="pl-10 bg-card border-border/50 focus:border-primary/50"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              
-              <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
-                <TabsList className="bg-card border border-border/50">
-                  <TabsTrigger value="ALL">All</TabsTrigger>
-                  <TabsTrigger value="ACTIVE">Active</TabsTrigger>
-                  <TabsTrigger value="PENDING">Pending</TabsTrigger>
-                  <TabsTrigger value="COMPLETED">Done</TabsTrigger>
-                </TabsList>
-              </Tabs>
+        {/* Circles List */}
+        <div>
+          <h2 className="text-2xl font-bold mb-6">Your Ajo Circles</h2>
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading circles...</p>
             </div>
-          </div>
-
-          <CircleList circles={circles} loading={loading} />
+          ) : circles.length === 0 ? (
+            <Card className="text-center py-12">
+              <CardContent>
+                <CircleDot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No circles yet</h3>
+                <p className="text-muted-foreground mb-6">Start your first savings circle and invite friends!</p>
+                <Button asChild>
+                  <Link href="/circles/create">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Create Your First Circle
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {circles.map((circle) => (
+                <Link key={circle.id} href={`/circles/${circle.id}`}>
+                  <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{circle.name}</CardTitle>
+                      <CardDescription>{circle.description || 'No description'}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold text-foreground">{circle.members?.length || 0}</span> members
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold text-foreground">{circle.contributionAmount} XLM</span> per contribution
+                        </p>
+                        <p className="text-sm">
+                          <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary">
+                            {circle.status}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex items-center text-primary font-semibold text-sm pt-2">
+                        View Details <ArrowRight className="ml-1 h-4 w-4" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </main>
@@ -173,8 +196,7 @@ function LandingPage() {
             <CircleDot className="h-8 w-8 text-primary" />
             <span className="text-xl font-bold text-foreground">Stellar Ajo</span>
           </div>
-          <div className="flex gap-4 items-center">
-            <ThemeToggle />
+          <div className="flex gap-4">
             <Button variant="outline" onClick={() => router.push('/auth/login')}>
               Sign In
             </Button>

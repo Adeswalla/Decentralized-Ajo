@@ -8,13 +8,3 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
-
-# Rust ignores
-target/
-**/*.rs.bk
-Cargo.lock
-
-.agents/
-.claude/
-issue.md
-skills-lock.json

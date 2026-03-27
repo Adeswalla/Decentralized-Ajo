@@ -1,0 +1,4 @@
+[fixed-branch 5b95a63] fix: upgrade rust toolchain to stable to support edition 2024
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To https://github.com/N-thnI/Decentralized-Ajo.git
+   a65ecaa..5b95a63  fixed-branch -> fixed-branch

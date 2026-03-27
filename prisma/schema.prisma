@@ -22,10 +22,6 @@ model User {
   
   firstName String?
   lastName  String?
-  /// Preferred display name (optional; shown instead of email when set)
-  username  String? @unique
-  /// Email used for product notifications (optional; can differ from login email)
-  notificationEmail String?
   phoneNumber String?
   profilePicture String?
   bio       String?
@@ -39,18 +35,6 @@ model User {
   votes     GovernanceVote[]
   contributions Contribution[]
   withdrawals Withdrawal[]
-  refreshTokens RefreshToken[]
-  notifications Notification[]
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-
-  @@index([userId])
 }
 
 model Circle {
@@ -81,9 +65,6 @@ model Circle {
   payments  PaymentSchedule[]
   governance GovernanceProposal[]
   withdrawals Withdrawal[]
-
-  @@index([organizerId])
-  @@index([status])
 }
 
 enum CircleStatus {
@@ -112,9 +93,6 @@ model CircleMember {
   leftAt   DateTime?
   
   @@unique([circleId, userId])
-  @@index([circleId])
-  @@index([userId])
-  @@index([status])
 }
 
 enum MemberStatus {
@@ -140,11 +118,6 @@ model Contribution {
   
   createdAt DateTime @default(now())
   completedAt DateTime?
-
-  @@index([circleId])
-  @@index([userId])
-  @@index([status])
-  @@index([circleId, status])
 }
 
 enum ContributionStatus {
@@ -169,10 +142,6 @@ model PaymentSchedule {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@index([circleId])
-  @@index([status])
-  @@index([circleId, status])
 }
 
 enum PaymentStatus {
@@ -205,10 +174,6 @@ model GovernanceProposal {
   
   // Relations
   votes     GovernanceVote[]
-
-  @@index([circleId])
-  @@index([status])
-  @@index([circleId, status])
 }
 
 enum ProposalType {
@@ -239,8 +204,6 @@ model GovernanceVote {
   createdAt DateTime @default(now())
   
   @@unique([proposalId, userId])
-  @@index([proposalId])
-  @@index([userId])
 }
 
 enum VoteChoice {
@@ -269,11 +232,6 @@ model Withdrawal {
   createdAt DateTime @default(now())
   approvedAt DateTime?
   completedAt DateTime?
-
-  @@index([circleId])
-  @@index([userId])
-  @@index([status])
-  @@index([circleId, status])
 }
 
 enum WithdrawalStatus {
@@ -291,35 +249,4 @@ model Session {
   expiresAt DateTime
   
   createdAt DateTime @default(now())
-}
-
-model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type      NotificationType
-  title     String
-  message   String
-  read      Boolean  @default(false)
-
-  // Optional link to a related resource
-  circleId  String?
-  link      String?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([userId, read])
-}
-
-enum NotificationType {
-  CONTRIBUTION_REMINDER
-  PAYOUT_TURN
-  MEMBER_JOINED
-  MEMBER_LEFT
-  PROPOSAL_CREATED
-  PROPOSAL_RESULT
-  CIRCLE_DISSOLVED
-  GENERAL
 }

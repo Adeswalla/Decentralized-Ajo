@@ -1,15 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { STELLAR_CONFIG, isValidStellarAddress, getSorobanClient } from './stellar-config';
-import { authenticatedFetch } from './auth-client';
-import * as StellarSdk from '@stellar/stellar-sdk';
-
-interface SignAndSubmitResult {
-  hash: string;
-  status: 'SUCCESS' | 'FAILED' | 'PENDING';
-  response: any;
-}
+import { STELLAR_CONFIG, isValidStellarAddress } from './stellar-config';
 
 interface WalletContextType {
   walletAddress: string | null;
@@ -19,13 +11,7 @@ interface WalletContextType {
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   signTransaction: (transactionXdr: string) => Promise<string>;
-  signAndSubmit: (transactionXdr: string, options?: SignAndSubmitOptions) => Promise<SignAndSubmitResult>;
   publicKey: string | null;
-}
-
-interface SignAndSubmitOptions {
-  pollingTimeout?: number;
-  pollingInterval?: number;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -91,10 +77,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          await authenticatedFetch('/api/users/update-wallet', {
+          await fetch('/api/users/update-wallet', {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
               walletAddress: pubKey,
@@ -147,68 +134,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signAndSubmit = async (
-    transactionXdr: string,
-    options: SignAndSubmitOptions = {}
-  ): Promise<SignAndSubmitResult> => {
-    const { pollingTimeout = 60000, pollingInterval = 2000 } = options;
-
-    if (!publicKey) {
-      throw new Error('Wallet not connected');
-    }
-
-    try {
-      // Step 1: Sign the transaction
-      const signedXdr = await signTransaction(transactionXdr);
-
-      // Step 2: Submit to network
-      const server = getSorobanClient();
-      const transaction = new StellarSdk.Transaction(
-        signedXdr,
-        STELLAR_CONFIG.networkPassphrase
-      );
-
-      const sendResponse = await server.sendTransaction(transaction);
-
-      if (sendResponse.status === 'ERROR') {
-        throw new Error(
-          `Transaction submission failed: ${sendResponse.errorResult?.toString()}`
-        );
-      }
-
-      const hash = sendResponse.hash;
-
-      // Step 3: Poll for confirmation
-      const startTime = Date.now();
-      while (Date.now() - startTime < pollingTimeout) {
-        const txResponse = await server.getTransaction(hash);
-
-        if (txResponse.status === 'SUCCESS') {
-          return {
-            hash,
-            status: 'SUCCESS',
-            response: txResponse,
-          };
-        }
-
-        if (txResponse.status === 'FAILED') {
-          throw new Error(`Transaction failed: ${JSON.stringify(txResponse)}`);
-        }
-
-        // Continue polling if NOT_FOUND or PENDING
-        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
-      }
-
-      // Timeout reached
-      throw new Error('Transaction confirmation timeout');
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Transaction failed';
-      setError(errorMessage);
-      throw err;
-    }
-  };
-
   const value: WalletContextType = {
     walletAddress,
     publicKey,
@@ -218,7 +143,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     connectWallet,
     disconnectWallet,
     signTransaction,
-    signAndSubmit,
   };
 
   return (

@@ -1,0 +1,20 @@
+        1 file(s) copied.
+npm warn Unknown project config "max-sockets". This will stop working in the next major version of npm.
+
+added 48 packages, and audited 333 packages in 36s
+
+60 packages are looking for funding
+  run `npm fund` for details
+
+1 moderate severity vulnerability
+
+To address all issues, run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+[fixed-branch 2ff7298] chore: perfectly sync package-lock.json using latest PR dependencies (pino, resend, nodemailer)
+ 1 file changed, 531 insertions(+)
+To https://github.com/N-thnI/Decentralized-Ajo.git
+   9cde1a8..2ff7298  fixed-branch -> fixed-branch

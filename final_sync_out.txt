@@ -1,0 +1,13 @@
+npm warn Unknown project config "max-sockets". This will stop working in the next major version of npm.
+
+added 331 packages, changed 1 package, and audited 333 packages in 5m
+
+60 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+[fixed-branch c5516e5] chore: final sync of package-lock.json with Next.js ^16.2.1
+ 1 file changed, 42 insertions(+), 42 deletions(-)
+To https://github.com/N-thnI/Decentralized-Ajo.git
+   5b95a63..c5516e5  fixed-branch -> fixed-branch

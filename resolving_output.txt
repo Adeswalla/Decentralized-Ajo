@@ -1,0 +1,28 @@
+On branch fixed-branch
+Your branch is up to date with 'origin/fixed-branch'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   push_output.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	clean.bat
+	clean_output.txt
+	pull.bat
+	pull_output.txt
+	resolving.bat
+	resolving_output.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+69503d5 Fix CI default scripts and lockfiles
+7b68115 Fix CI Soroban integer type inference & Vercel PR deploys
+73911df Add automated tests for AjoCircle contract
+83c7f01 chore: remove package-lock.json in favor of pnpm-lock.yaml
+118a86d added new feature
+1dd1e8f Merge pull request #42 from Benalex8797/feat/session
+ba8d042 fix NewSession
+10640e4 Automated deployment setup: GitHub Actions, Production Prisma config, and Vercel settings
+e18430b Major changes
+4447de8 fix: correct Stellar SDK import and remove unused dependency\n\nUpdate imports to @stellar/js-stellar-sdk and remove stellar-sdk.

@@ -1,48 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import {
-  verifyPassword,
-  generateToken,
-  generateRefreshToken,
-  REFRESH_TOKEN_COOKIE_NAME,
-  getRefreshTokenExpiryDate,
-  isSecureCookieEnvironment,
-} from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
-import { LoginSchema } from '@/lib/validations/auth';
-import { RATE_LIMITS } from '@/lib/rate-limit';
+import { verifyPassword, generateToken, isValidEmail } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.auth, 'auth:login');
-  if (rateLimited) return rateLimited;
-
-  const { data, error } = await validateBody(request, LoginSchema);
-  if (error) return error;
-
   try {
-    const { email, password } = data;
+    const body = await request.json();
+    const { email, password } = body;
 
+    // Validate inputs
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      );
+    }
+
+    // Find user
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
     }
 
+    // Verify password
     const isValidPassword = await verifyPassword(password, user.password);
+
     if (!isValidPassword) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
     }
 
+    // Generate token
     const token = generateToken({
       userId: user.id,
       email: user.email,
       walletAddress: user.walletAddress || undefined,
     });
-    const refreshToken = await generateRefreshToken(user.id);
 
-    const response = NextResponse.json(
+    return NextResponse.json(
       {
         success: true,
         user: {
@@ -54,22 +63,13 @@ export async function POST(request: NextRequest) {
         },
         token,
       },
-      { status: 200 },
+      { status: 200 }
     );
-
-    response.cookies.set({
-      name: REFRESH_TOKEN_COOKIE_NAME,
-      value: refreshToken,
-      httpOnly: true,
-      secure: isSecureCookieEnvironment(),
-      sameSite: 'lax',
-      path: '/',
-      expires: getRefreshTokenExpiryDate(),
-    });
-
-    return response;
-  } catch (err) {
-    console.error('Login error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error) {
+    console.error('Login error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

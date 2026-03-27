@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { authenticatedFetch } from '@/lib/auth-client';
 
 export default function CreateCirclePage() {
   const router = useRouter();
@@ -85,10 +84,11 @@ export default function CreateCirclePage() {
         return;
       }
 
-      const response = await authenticatedFetch('/api/circles', {
+      const response = await fetch('/api/circles', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: formData.name,
@@ -102,10 +102,6 @@ export default function CreateCirclePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/auth/login');
-          return;
-        }
         toast.error(data.error || 'Failed to create circle');
         return;
       }

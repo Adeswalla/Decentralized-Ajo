@@ -1,0 +1,35 @@
+npm warn Unknown project config "max-sockets". This will stop working in the next major version of npm.
+app/auth/login/page.tsx(10,27): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+app/auth/register/page.tsx(10,27): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+app/circles/[id]/page.tsx(9,62): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+app/circles/create/page.tsx(11,27): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+app/circles/join/page.tsx(6,65): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+app/page.tsx(8,78): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/accordion.tsx(5,33): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/breadcrumb.tsx(3,46): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/calendar.tsx(8,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/calendar.tsx(39,31): error TS7006: Parameter 'date' implicitly has an 'any' type.
+components/ui/calendar.tsx(128,18): error TS7031: Binding element 'className' implicitly has an 'any' type.
+components/ui/calendar.tsx(128,29): error TS7031: Binding element 'rootRef' implicitly has an 'any' type.
+components/ui/calendar.tsx(138,21): error TS7031: Binding element 'className' implicitly has an 'any' type.
+components/ui/calendar.tsx(138,32): error TS7031: Binding element 'orientation' implicitly has an 'any' type.
+components/ui/calendar.tsx(159,24): error TS7031: Binding element 'children' implicitly has an 'any' type.
+components/ui/carousel.tsx(7,39): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/checkbox.tsx(5,27): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/command.tsx(5,28): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/context-menu.tsx(5,57): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/dialog.tsx(5,23): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/dropdown-menu.tsx(5,57): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/input-otp.tsx(5,27): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/menubar.tsx(5,57): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/navigation-menu.tsx(4,33): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/pagination.tsx(6,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/radio-group.tsx(5,28): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/resizable.tsx(4,34): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/select.tsx(5,59): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/sheet.tsx(5,23): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/sidebar.tsx(6,31): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/spinner.tsx(1,29): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/ui/toast.tsx(6,19): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+components/wallet-button.tsx(14,38): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+lib/stellar-config.ts(21,25): error TS2339: Property 'Server' does not exist on type 'typeof import("c:/Users/USER/Desktop/Workspace/Html/practice/CODE SCHOOL/Decentralized-Ajo/node_modules/@stellar/stellar-sdk/lib/index")'.
