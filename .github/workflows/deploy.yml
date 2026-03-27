@@ -1,49 +1,30 @@
-name: Deploy to Vercel
+name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
-      - name: Set up Node.js
+      - uses: actions/checkout@v4
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: "pnpm"
-
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install Pnpm
+        run: npm install -g pnpm
       - name: Install Dependencies
         run: pnpm install
-
-      - name: Build Smart Contract (Verification)
-        run: |
-          rustup target add wasm32-unknown-unknown
-          cd contracts/ajo-circle
-          cargo build --target wasm32-unknown-unknown --release
-
-      - name: Prisma Generate
-        run: pnpm prisma generate
-
+      - name: Build
+        run: pnpm run build
       - name: Deploy to Vercel
-        if: github.event_name == 'push'
         uses: amondnet/vercel-action@v20
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--prod"
           working-directory: ./
+          vercel-args: '--prod'

@@ -1,2 +1,11 @@
 {
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "rust-analyzer.check.command": "clippy",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/target": true,
+    "**/.next": true
+  }
 }

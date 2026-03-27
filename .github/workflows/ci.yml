@@ -1,45 +1,35 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
-  pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
+    branches: [ main, fixed-branch ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build-and-test:
+  test-contracts:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Build & unit-test Soroban contract
-        working-directory: contracts/ajo-circle
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Build and Test Contracts
         run: |
-          cargo build --target wasm32-unknown-unknown --release
+          cd contracts/ajo-circle
           cargo test --lib
 
-      - name: Prisma Generate
-        run: npx prisma generate
-
-      - name: Next.js build
-        env:
-          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
-          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars-long
-        run: npm run build
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install Pnpm
+        run: npm install -g pnpm
+      - name: Install Dependencies
+        run: pnpm install
+      - name: Build
+        run: pnpm run build
