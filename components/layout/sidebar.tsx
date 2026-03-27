@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CircleDot, LayoutDashboard, PlusCircle, Users, ArrowLeftRight, Wallet } from 'lucide-react';
+import { CircleDot, LayoutDashboard, PlusCircle, Users, ArrowLeftRight, Wallet, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const navLinks = [
@@ -11,6 +11,7 @@ export const navLinks = [
   { href: '/circles/join', label: 'Join Circle', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/profile', label: 'Profile', icon: Wallet },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
