@@ -3,6 +3,7 @@
 import React from 'react';
 import { useWallet } from '@/lib/wallet-context';
 import { DashboardCard } from './dashboard-card';
+import { DashboardCardSkeleton } from './dashboard-card-skeleton';
 import { UpcomingCycles } from './dashboard/upcoming-cycles';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,6 +56,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = fa
           </p>
         </header>
 
+      {/* 3. & 4. Data Rendering and Grid Responsiveness */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {[1, 2, 3].map((i) => (
+            <DashboardCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : activeGroups.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {activeGroups.map((group) => (
+            <DashboardCard
+              key={group.id}
+              title={group.name}
+              pooledBalance={group.balance}
+              nextPayout={group.nextCycle}
+            />
+          ))}
+        </div>
+      ) : (
+        /* 6. Edge Cases - Empty State */
+        <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-3xl bg-muted/20 text-center">
+          <div className="p-4 bg-muted rounded-full text-muted-foreground mb-4">
+            <Info size={32} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Active group cards — takes 2/3 width on large screens */}
           <div className="lg:col-span-2">
