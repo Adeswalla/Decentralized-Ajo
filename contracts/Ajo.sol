@@ -16,7 +16,8 @@ contract Ajo {
     uint256 public maxMembers;
 
     /// @notice List of all members in the Ajo pool
-    address[] public members;
+    mapping(uint256 => address) public members;
+    uint256 public membersCount;
 
     /// @notice Mapping from member address to their current balance in the pool
     mapping(address => uint256) public balances;

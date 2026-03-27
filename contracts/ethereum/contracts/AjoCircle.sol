@@ -49,11 +49,11 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         address organizer;
         address tokenAddress;
         uint256 contributionAmount;
-        uint256 frequencyDays;
-        uint256 maxRounds;
-        uint256 currentRound;
-        uint256 memberCount;
-        uint256 maxMembers;
+        uint32 frequencyDays;
+        uint32 maxRounds;
+        uint32 currentRound;
+        uint32 memberCount;
+        uint32 maxMembers;
     }
 
     /// @notice Individual member data
@@ -92,12 +92,46 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
     mapping(address => bool) public voteCast;
     mapping(address => uint256) public lastDepositAt;
 
-    address[] public memberAddresses;
-    address[] public rotationOrder;
+    mapping(uint256 => address) public memberAddresses;
+    uint256 public memberAddressesCount;
+    mapping(uint256 => address) public rotationOrder;
+    uint256 public rotationOrderCount;
 
     uint256 public roundDeadline;
     uint256 public roundContribCount;
     uint256 public totalPool;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // QUERIES
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// @notice Get a slice of member addresses
+    function getMemberAddressesSlice(uint256 _offset, uint256 _limit) external view returns (address[] memory) {
+        uint256 count = _limit;
+        if (_offset + _limit > memberAddressesCount) {
+            count = memberAddressesCount > _offset ? memberAddressesCount - _offset : 0;
+        }
+
+        address[] memory slice = new address[](count);
+        for (uint32 i = 0; i < count; i++) {
+            slice[i] = memberAddresses[_offset + i];
+        }
+        return slice;
+    }
+
+    /// @notice Get a slice of rotation order addresses
+    function getRotationOrderSlice(uint256 _offset, uint256 _limit) external view returns (address[] memory) {
+        uint256 count = _limit;
+        if (_offset + _limit > rotationOrderCount) {
+            count = rotationOrderCount > _offset ? rotationOrderCount - _offset : 0;
+        }
+
+        address[] memory slice = new address[](count);
+        for (uint32 i = 0; i < count; i++) {
+            slice[i] = rotationOrder[_offset + i];
+        }
+        return slice;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -190,11 +224,11 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
             organizer: _organizer,
             tokenAddress: _tokenAddress,
             contributionAmount: _contributionAmount,
-            frequencyDays: _frequencyDays,
-            maxRounds: _maxRounds,
+            frequencyDays: uint32(_frequencyDays),
+            maxRounds: uint32(_maxRounds),
             currentRound: 1,
             memberCount: 1,
-            maxMembers: configuredMaxMembers
+            maxMembers: uint32(configuredMaxMembers)
         });
 
         circleStatus = CircleStatus.Active;
@@ -219,12 +253,13 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
 
     function joinCircle(address _newMember) external onlyOrganizer notPanicked {
         if (members[_newMember].memberAddress != address(0)) revert AlreadyExists();
-        if (circle.memberCount >= circle.maxMembers) revert CircleAtCapacity();
+        CircleData memory _circle = circle;
+        if (_circle.memberCount >= _circle.maxMembers) revert CircleAtCapacity();
 
         _addMember(_newMember);
-        circle.memberCount++;
+        circle.memberCount = _circle.memberCount + 1;
 
-        emit MemberJoined(_newMember, circle.memberCount);
+        emit MemberJoined(_newMember, _circle.memberCount + 1);
     }
 
     function contribute(uint256 _amount) external onlyMember notPanicked nonReentrant {
@@ -236,10 +271,11 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
 
         standing.missedCount = 0;
 
-        IERC20Upgradeable(circle.tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
+        CircleData memory _circle = circle;
+        IERC20Upgradeable(_circle.tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
 
         MemberData storage member = members[msg.sender];
-        uint256 roundTarget = circle.currentRound * circle.contributionAmount;
+        uint256 roundTarget = uint256(_circle.currentRound) * _circle.contributionAmount;
         bool hadCompletedRound = member.totalContributed >= roundTarget;
 
         member.totalContributed += _amount;
@@ -247,14 +283,16 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         bool hasCompletedRound = member.totalContributed >= roundTarget;
 
         if (!hadCompletedRound && hasCompletedRound) {
-            roundContribCount++;
+            uint256 _roundContribCount = roundContribCount + 1;
 
-            if (roundContribCount >= circle.memberCount) {
-                roundDeadline += circle.frequencyDays * 1 days;
-                if (circle.currentRound < circle.maxRounds) {
-                    circle.currentRound++;
+            if (_roundContribCount >= uint256(_circle.memberCount)) {
+                roundDeadline += uint256(_circle.frequencyDays) * 1 days;
+                if (_circle.currentRound < _circle.maxRounds) {
+                    circle.currentRound = _circle.currentRound + 1;
                 }
                 roundContribCount = 0;
+            } else {
+                roundContribCount = _roundContribCount;
             }
         }
 
@@ -268,8 +306,9 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
 
         standing.missedCount = 0;
 
-        uint256 amount = circle.contributionAmount;
-        IERC20Upgradeable(circle.tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
+        CircleData memory _circle = circle;
+        uint256 amount = _circle.contributionAmount;
+        IERC20Upgradeable(_circle.tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
 
         MemberData storage member = members[msg.sender];
         member.totalContributed += amount;
@@ -287,15 +326,17 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         if (!standing.isActive) revert Disqualified();
         if (member.hasReceivedPayout) revert AlreadyPaid();
 
-        if (rotationOrder.length > 0) {
-            uint256 idx = circle.currentRound - 1;
-            if (idx >= rotationOrder.length) revert InvalidInput();
+        CircleData memory _circle = circle;
+
+        if (rotationOrderCount > 0) {
+            uint256 idx = uint256(_circle.currentRound) - 1;
+            if (idx >= rotationOrderCount) revert InvalidInput();
             if (rotationOrder[idx] != msg.sender) revert Unauthorized();
         }
 
-        uint256 payout = circle.memberCount * circle.contributionAmount;
+        uint256 payout = uint256(_circle.memberCount) * _circle.contributionAmount;
 
-        IERC20Upgradeable(circle.tokenAddress).safeTransfer(msg.sender, payout);
+        IERC20Upgradeable(_circle.tokenAddress).safeTransfer(msg.sender, payout);
 
         member.hasReceivedPayout = true;
         member.totalWithdrawn += payout;
@@ -323,6 +364,7 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
             isActive: true
         });
 
-        memberAddresses.push(_member);
+        memberAddresses[memberAddressesCount] = _member;
+        memberAddressesCount++;
     }
 }

@@ -16,7 +16,8 @@ contract AjoFactory is Ownable {
     address public immutable implementation;
 
     /// @notice Registry of all deployed Ajo Circle proxy addresses
-    address[] public ajoRegistry;
+    mapping(uint256 => address) public ajoRegistry;
+    uint256 public registryCount;
 
     // ═══════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -80,7 +81,8 @@ contract AjoFactory is Ownable {
         );
 
         // Track in registry
-        ajoRegistry.push(proxyAddress);
+        ajoRegistry[registryCount] = proxyAddress;
+        registryCount++;
 
         emit AjoCreated(
             proxyAddress,
@@ -99,11 +101,22 @@ contract AjoFactory is Ownable {
 
     /// @notice Get the total number of deployed Ajo circles
     function getRegistryLength() external view returns (uint256) {
-        return ajoRegistry.length;
+        return registryCount;
     }
 
-    /// @notice Get all deployed Ajo circle addresses
-    function getRegistry() external view returns (address[] memory) {
-        return ajoRegistry;
+    /// @notice Get a slice of deployed Ajo circle addresses
+    /// @param _offset Starting index
+    /// @param _limit Maximum number of addresses to return
+    function getRegistrySlice(uint256 _offset, uint256 _limit) external view returns (address[] memory) {
+        uint256 count = _limit;
+        if (_offset + _limit > registryCount) {
+            count = registryCount > _offset ? registryCount - _offset : 0;
+        }
+
+        address[] memory slice = new address[](count);
+        for (uint32 i = 0; i < count; i++) {
+            slice[i] = ajoRegistry[_offset + i];
+        }
+        return slice;
     }
 }
