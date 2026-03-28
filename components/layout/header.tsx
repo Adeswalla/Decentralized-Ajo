@@ -5,6 +5,7 @@ import { Menu, CircleDot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { SidebarNav } from './sidebar';
 
 export function Header() {
@@ -29,6 +30,7 @@ export function Header() {
       </Sheet>
 
       <span className="font-semibold flex-1">Stellar Ajo</span>
+      <NotificationBell />
       <ThemeToggle />
     </header>
   );

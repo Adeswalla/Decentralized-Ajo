@@ -1,8 +1,21 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import StellarSdk from 'stellar-sdk';
 import { STELLAR_CONFIG, isValidStellarAddress } from './stellar-config';
 import { authenticatedFetch } from './auth-client';
+
+interface SignAndSubmitResult {
+  hash: string;
+  ledger: number;
+  successful: boolean;
+  timestamp: number;
+}
+
+interface SignAndSubmitOptions {
+  pollingTimeout?: number;
+  pollingInterval?: number;
+}
 
 interface WalletContextType {
   walletAddress: string | null;
@@ -12,6 +25,7 @@ interface WalletContextType {
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   signTransaction: (transactionXdr: string) => Promise<string>;
+  signAndSubmit: (transactionXdr: string, options?: SignAndSubmitOptions) => Promise<SignAndSubmitResult>;
   publicKey: string | null;
 }
 
@@ -134,6 +148,68 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signAndSubmit = async (
+    transactionXdr: string,
+    options: SignAndSubmitOptions = {}
+  ): Promise<SignAndSubmitResult> => {
+    const { pollingTimeout = 30000, pollingInterval = 1000 } = options;
+
+    if (!publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      // Step 1: Sign the transaction
+      const signedXdr = await signTransaction(transactionXdr);
+
+      // Step 2: Build transaction object
+      const transaction = new StellarSdk.Transaction(
+        signedXdr,
+        STELLAR_CONFIG.networkPassphrase
+      );
+
+      // Step 3: Submit to network
+      const server = new StellarSdk.Server(STELLAR_CONFIG.horizonUrl);
+      const submissionPromise = server.submitTransaction(transaction);
+
+      // Step 4: Wait for confirmation with timeout
+      const startTime = Date.now();
+      let lastError: Error | null = null;
+
+      while (Date.now() - startTime < pollingTimeout) {
+        try {
+          const result = await Promise.race([
+            submissionPromise,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error('Polling timeout')),
+                pollingInterval
+              )
+            ),
+          ]);
+
+          return {
+            hash: result.hash,
+            ledger: result.ledger,
+            successful: result.successful,
+            timestamp: Date.now(),
+          };
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          // Continue polling
+          await new Promise((resolve) => setTimeout(resolve, pollingInterval));
+        }
+      }
+
+      throw lastError || new Error('Transaction confirmation timeout');
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to sign and submit transaction';
+      setError(errorMessage);
+      throw err;
+    }
+  };
+
   const value: WalletContextType = {
     walletAddress,
     publicKey,
@@ -143,6 +219,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     connectWallet,
     disconnectWallet,
     signTransaction,
+    signAndSubmit,
   };
 
   return (

@@ -1,9 +1,16 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = 'Ajo Platform <alerts@yourdomain.com>';
 
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
+
 export async function sendPayoutAlert(email: string, userName: string, amount: number) {
+  const resend = getResend();
+  if (!resend) return;
   try {
     await resend.emails.send({
       from: FROM,
@@ -17,6 +24,8 @@ export async function sendPayoutAlert(email: string, userName: string, amount: n
 }
 
 export async function sendContributionReminder(email: string, userName: string, amount: number, circleName: string) {
+  const resend = getResend();
+  if (!resend) return;
   try {
     await resend.emails.send({
       from: FROM,

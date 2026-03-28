@@ -15,7 +15,12 @@ import { authenticatedFetch, clearAuthState } from '@/lib/auth-client';
 const profileSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
   lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  username: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
+    .optional(),
   phoneNumber: z.string().optional(),
+  notificationEmail: z.string().email('Invalid email address').optional().or(z.literal('')),
   bio: z.string().max(160, 'Bio must be 160 characters or less').optional(),
 });
 
@@ -106,6 +111,35 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
           />
           {errors.lastName && (
             <p className="text-sm text-destructive">{errors.lastName.message}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="username">Username <span className="text-muted-foreground text-xs">(optional)</span></Label>
+          <Input
+            id="username"
+            placeholder="john_doe"
+            {...register('username')}
+            className={errors.username ? 'border-destructive' : ''}
+          />
+          {errors.username && (
+            <p className="text-sm text-destructive">{errors.username.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="notificationEmail">Notification Email <span className="text-muted-foreground text-xs">(optional)</span></Label>
+          <Input
+            id="notificationEmail"
+            type="email"
+            placeholder="notifications@example.com"
+            {...register('notificationEmail')}
+            className={errors.notificationEmail ? 'border-destructive' : ''}
+          />
+          {errors.notificationEmail && (
+            <p className="text-sm text-destructive">{errors.notificationEmail.message}</p>
           )}
         </div>
       </div>
