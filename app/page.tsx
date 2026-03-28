@@ -1,28 +1,83 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, PlusCircle, Wallet, TrendingUp, CircleDot, ArrowRight } from 'lucide-react';
+import { Users, PlusCircle, Wallet, TrendingUp, CircleDot, ArrowRight, Search } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CircleList } from '@/components/dashboard/circle-list';
+import { authenticatedFetch } from '@/lib/auth-client';
+import { CircleList } from '@/components/dashboard/circle-list';
 
 interface Circle {
   id: string;
   name: string;
   description?: string;
   contributionAmount: number;
+  contributionFrequencyDays: number;
   status: string;
   members: { userId: string }[];
 }
 
 export default function Home() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [circles, setCircles] = useState<Circle[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
+
+  // Filter and Sort State - Synced with URL
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'ALL');
+  const [durationFilter, setDurationFilter] = useState(searchParams.get('duration') || 'ALL');
+  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'newest');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Update URL when filters change
+  const updateURLParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('search', searchQuery);
+    if (statusFilter !== 'ALL') params.set('status', statusFilter);
+    if (durationFilter !== 'ALL') params.set('duration', durationFilter);
+    if (sortBy !== 'newest') params.set('sortBy', sortBy);
+    
+    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    router.replace(newUrl, { scroll: false });
+  }, [searchQuery, statusFilter, durationFilter, sortBy, router]);
+
+  useEffect(() => {
+    updateURLParams();
+  }, [updateURLParams]);
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setDurationFilter('ALL');
+    setSortBy('newest');
+  };
+
+  // Remove single filter
+  const removeFilter = (filterType: string) => {
+    if (filterType === 'status') setStatusFilter('ALL');
+    if (filterType === 'duration') setDurationFilter('ALL');
+    if (filterType === 'sort') setSortBy('newest');
+    if (filterType === 'search') setSearchQuery('');
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -38,19 +93,21 @@ export default function Home() {
       setUserName(userData.firstName || userData.email);
     }
 
-    fetchCircles(token);
+    fetchCircles();
   }, []);
 
-  const fetchCircles = async (token: string) => {
+  const fetchCircles = async () => {
     try {
-      const response = await fetch('/api/circles', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const params = new URLSearchParams();
+      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
+      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      if (durationFilter !== 'ALL') params.set('duration', durationFilter);
+      if (sortBy) params.set('sortBy', sortBy);
+      
+      const response = await authenticatedFetch(`/api/circles?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
-        setCircles(data.circles || []);
+        setCircles(data.data || []);
       }
     } catch (error) {
       console.error('Error fetching circles:', error);
@@ -59,9 +116,23 @@ export default function Home() {
     }
   };
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCircles();
+    }
+  }, [debouncedSearchQuery, statusFilter, durationFilter, sortBy, isAuthenticated]);
+
   if (!isAuthenticated) {
     return <LandingPage />;
   }
+
+  // Active filters count
+  const activeFiltersCount = [
+    statusFilter !== 'ALL',
+    durationFilter !== 'ALL',
+    sortBy !== 'newest',
+    searchQuery !== ''
+  ].filter(Boolean).length;
 
   return (
     <main className="min-h-screen bg-background">
@@ -125,60 +196,108 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* Circles List */}
-        <div>
-          <h2 className="text-2xl font-bold mb-6">Your Ajo Circles</h2>
-          {loading ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">Loading circles...</p>
+        {/* Filter Bar */}
+        <div className="space-y-4 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold">Your Ajo Circles</h2>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search Input */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search circles..."
+                  className="pl-10 bg-card border-border/50 focus:border-primary/50"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Status Filter */}
+              <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
+                <TabsList className="bg-card border border-border/50">
+                  <TabsTrigger value="ALL">All</TabsTrigger>
+                  <TabsTrigger value="ACTIVE">Active</TabsTrigger>
+                  <TabsTrigger value="PENDING">Pending</TabsTrigger>
+                  <TabsTrigger value="COMPLETED">Done</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Duration Filter Dropdown */}
+              <Select value={durationFilter} onValueChange={setDurationFilter}>
+                <SelectTrigger className="w-[140px] bg-card border-border/50">
+                  <SelectValue placeholder="Duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Durations</SelectItem>
+                  <SelectItem value="Weekly">Weekly</SelectItem>
+                  <SelectItem value="Monthly">Monthly</SelectItem>
+                  <SelectItem value="Quarterly">Quarterly</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Sort Dropdown */}
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[160px] bg-card border-border/50">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                  <SelectItem value="size_desc">Size: High to Low</SelectItem>
+                  <SelectItem value="size_asc">Size: Low to High</SelectItem>
+                  <SelectItem value="name_asc">Name: A to Z</SelectItem>
+                  <SelectItem value="name_desc">Name: Z to A</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          ) : circles.length === 0 ? (
-            <Card className="text-center py-12">
-              <CardContent>
-                <CircleDot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No circles yet</h3>
-                <p className="text-muted-foreground mb-6">Start your first savings circle and invite friends!</p>
-                <Button asChild>
-                  <Link href="/circles/create">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Create Your First Circle
-                  </Link>
+          </div>
+
+          {/* Active Filters Chips */}
+          {activeFiltersCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="text-sm text-muted-foreground">Active filters:</span>
+              
+              {searchQuery && (
+                <Badge variant="secondary" className="gap-1">
+                  Search: {searchQuery}
+                  <X className="h-3 w-3 cursor-pointer ml-1" onClick={() => removeFilter('search')} />
+                </Badge>
+              )}
+              
+              {statusFilter !== 'ALL' && (
+                <Badge variant="secondary" className="gap-1">
+                  Status: {statusFilter}
+                  <X className="h-3 w-3 cursor-pointer ml-1" onClick={() => removeFilter('status')} />
+                </Badge>
+              )}
+              
+              {durationFilter !== 'ALL' && (
+                <Badge variant="secondary" className="gap-1">
+                  Duration: {durationFilter}
+                  <X className="h-3 w-3 cursor-pointer ml-1" onClick={() => removeFilter('duration')} />
+                </Badge>
+              )}
+              
+              {sortBy !== 'newest' && (
+                <Badge variant="secondary" className="gap-1">
+                  Sort: {sortBy === 'size_desc' ? 'Size: High to Low' : 
+                         sortBy === 'size_asc' ? 'Size: Low to High' :
+                         sortBy === 'name_asc' ? 'Name: A to Z' :
+                         sortBy === 'name_desc' ? 'Name: Z to A' : sortBy}
+                  <X className="h-3 w-3 cursor-pointer ml-1" onClick={() => removeFilter('sort')} />
+                </Badge>
+              )}
+              
+              {activeFiltersCount > 1 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs h-7">
+                  Clear all
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {circles.map((circle) => (
-                <Link key={circle.id} href={`/circles/${circle.id}`}>
-                  <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-                    <CardHeader>
-                      <CardTitle className="text-lg">{circle.name}</CardTitle>
-                      <CardDescription>{circle.description || 'No description'}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          <span className="font-semibold text-foreground">{circle.members?.length || 0}</span> members
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          <span className="font-semibold text-foreground">{circle.contributionAmount} XLM</span> per contribution
-                        </p>
-                        <p className="text-sm">
-                          <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary">
-                            {circle.status}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="flex items-center text-primary font-semibold text-sm pt-2">
-                        View Details <ArrowRight className="ml-1 h-4 w-4" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+              )}
             </div>
           )}
         </div>
+
+        <CircleList circles={circles} loading={loading} />
       </div>
     </main>
   );

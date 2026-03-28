@@ -18,7 +18,7 @@ export const STELLAR_CONFIG = {
 
 // Initialize Stellar SDK
 export const getStellarServer = () => {
-  return new StellarSdk.Server(STELLAR_CONFIG.horizonUrl);
+  return new StellarSdk.Horizon.Server(STELLAR_CONFIG.horizonUrl);
 };
 
 // Initialize Soroban RPC client
@@ -39,7 +39,7 @@ export const isValidStellarAddress = (address: string): boolean => {
   try {
     StellarSdk.StrKey.decodeEd25519PublicKey(address);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 };

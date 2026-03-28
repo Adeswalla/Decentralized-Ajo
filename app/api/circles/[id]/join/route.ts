@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
-import type { Prisma } from '@prisma/client';
+import { applyRateLimit } from '@/lib/api-helpers';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 
-// GET - Preview circle info before joining (public, auth required but no membership check)
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -14,27 +14,11 @@ export async function GET(
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const { id } = await params;
+  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:join-preview', payload.userId);
+  if (rateLimited) return rateLimited;
 
   try {
-    const member = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const circle = await tx.circle.findUnique({
-        where: { id },
-        include: { members: true },
-      });
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-    }
-
-      if (circle.status !== 'PENDING') {
-        throw Object.assign(new Error('Circle is not accepting new members'), { status: 400 });
-      }
+    const { id } = await params;
 
     const circle = await prisma.circle.findUnique({
       where: { id },
@@ -47,50 +31,38 @@ export async function GET(
         maxRounds: true,
         currentRound: true,
         status: true,
-        organizer: {
-          select: { firstName: true, lastName: true, email: true },
-        },
+        organizer: { select: { firstName: true, lastName: true, email: true } },
         members: { select: { id: true } },
       },
     });
 
-    if (!circle) {
-      return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
-    }
+    if (!circle) return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
 
-    const isMember = await prisma.circleMember.findUnique({
+    const alreadyMember = await prisma.circleMember.findUnique({
       where: { circleId_userId: { circleId: id, userId: payload.userId } },
     });
 
-    return NextResponse.json({
-      success: true,
-      circle,
-      alreadyMember: !!isMember,
-    });
-  } catch (error) {
-    console.error('Preview circle error:', error);
+    return NextResponse.json({ success: true, circle, alreadyMember: !!alreadyMember });
+  } catch (err) {
+    console.error('Preview circle error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST - Join a circle
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const token = extractToken(request.headers.get('authorization'));
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const payload = verifyToken(token);
+  if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+
+  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:join', payload.userId);
+  if (rateLimited) return rateLimited;
+
   try {
-    const authHeader = request.headers.get('authorization');
-    const token = extractToken(authHeader);
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-    }
-
     const { id } = await params;
 
     const circle = await prisma.circle.findUnique({
@@ -98,26 +70,18 @@ export async function POST(
       include: { members: true },
     });
 
-    if (!circle) {
-      return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
-    }
+    if (!circle) return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
 
     const existingMember = await prisma.circleMember.findUnique({
       where: { circleId_userId: { circleId: id, userId: payload.userId } },
     });
 
     if (existingMember) {
-      return NextResponse.json(
-        { error: 'You are already a member of this circle' },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'You are already a member of this circle' }, { status: 409 });
     }
 
     if (circle.status !== 'ACTIVE' && circle.status !== 'PENDING') {
-      return NextResponse.json(
-        { error: 'This circle is not accepting new members' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'This circle is not accepting new members' }, { status: 403 });
     }
 
     const newMember = await prisma.circleMember.create({
@@ -127,15 +91,13 @@ export async function POST(
         rotationOrder: circle.members.length + 1,
       },
       include: {
-        user: {
-          select: { id: true, email: true, firstName: true, lastName: true },
-        },
-      });
+        user: { select: { id: true, email: true, firstName: true, lastName: true } },
+      },
     });
 
     return NextResponse.json({ success: true, member: newMember }, { status: 201 });
-  } catch (error) {
-    console.error('Join circle error:', error);
+  } catch (err) {
+    console.error('Join circle error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

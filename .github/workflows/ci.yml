@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+        node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.85.0
+
+        with:
+          toolchain: 1.85.0
+          targets: wasm32-unknown-unknown
+
+      - name: Build & unit-test Soroban contract
+        working-directory: contracts/ajo-circle
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          cargo test --lib
+
+      - name: Prisma Generate
+        run: pnpm prisma generate
+
+      - name: Run frontend unit tests
+        run: pnpm test:unit
+
+      - name: Next.js build
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars-long
+        run: pnpm build

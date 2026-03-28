@@ -1,0 +1,9 @@
+{
+  "name": "ajo-ethereum-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2"
+  }
+}

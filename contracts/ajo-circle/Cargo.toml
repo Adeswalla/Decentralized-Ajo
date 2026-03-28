@@ -14,8 +14,8 @@ codegen-units = 1
 strip = true
 
 [dependencies]
-soroban-sdk = "20.0"
-soroban-sdk-macros = "20.0"
+soroban-sdk = "=20.0.0"
+soroban-sdk-macros = "=20.0.0"
 
 [dev-dependencies]
-soroban-sdk = { version = "20.0", features = ["testutils"] }
+soroban-sdk = { version = "=20.0.0", features = ["testutils"] }
