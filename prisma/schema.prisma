@@ -41,6 +41,10 @@ model User {
   withdrawals Withdrawal[]
   refreshTokens RefreshToken[]
   notifications Notification[]
+  
+  // New Ajo Group Relations
+  createdGroups AjoGroup[]  @relation("GroupCreator")
+  memberships   AjoMember[]
 }
 
 model RefreshToken {
@@ -70,6 +74,7 @@ model Circle {
   // Blockchain
   contractAddress String?
   contractDeployed Boolean @default(false)
+  onChainId String?
   
   // Metadata
   createdAt DateTime @default(now())
@@ -110,7 +115,6 @@ model CircleMember {
   // Tracking
   joinedAt DateTime @default(now())
   leftAt   DateTime?
-  
   @@unique([circleId, userId])
   @@index([circleId])
   @@index([userId])
@@ -166,7 +170,6 @@ model PaymentSchedule {
   
   status    PaymentStatus @default(PENDING)
   paidAt    DateTime?
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -260,12 +263,10 @@ model Withdrawal {
   requestedAmount Float // Amount requested before penalty
   penaltyPercentage Float @default(10)
   reason    String?
-  
   status    WithdrawalStatus @default(PENDING)
   
   // Blockchain
   txHash    String?
-  
   createdAt DateTime @default(now())
   approvedAt DateTime?
   completedAt DateTime?
@@ -322,4 +323,37 @@ enum NotificationType {
   PROPOSAL_RESULT
   CIRCLE_DISSOLVED
   GENERAL
+}
+
+// ==========================================
+// NEW AJO GROUP MODELS (Issue #102)
+// ==========================================
+
+model AjoGroup {
+  id              String      @id // Matches the Soroban on-chain index/ID
+  name            String
+  description     String?
+  creator_address String      // Maps to User.walletAddress
+  txHash          String?     // Needed for Issue #103 verification
+  status          String      @default("PENDING") // PENDING, CONFIRMED, FAILED
+  created_at      DateTime    @default(now())
+
+  // Relationships
+  creator         User        @relation("GroupCreator", fields: [creator_address], references: [walletAddress])
+  members         AjoMember[]
+
+  @@map("ajo_groups") // Keeps the PostgreSQL table name clean
+}
+
+model AjoMember {
+  id          String   @id @default(cuid())
+  userId      String
+  groupId     String
+  joinedAt    DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group       AjoGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId]) // Prevents duplicate memberships
+  @@map("ajo_members")
 }
