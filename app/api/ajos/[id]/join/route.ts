@@ -7,8 +7,7 @@ import { RATE_LIMITS } from '@/lib/rate-limit';
 /**
  * POST /api/ajos/:id/join
  *
- * Adds the authenticated user to the UserAjoParticipation table (off-chain record).
- * Status starts as PENDING until an on-chain event confirms the membership.
+ * Adds the authenticated user to the UserAjo table (off-chain record).
  */
 export async function POST(
   request: NextRequest,
@@ -29,68 +28,23 @@ export async function POST(
     const { id: ajoId } = await params;
 
     // ── Validate the Ajo group exists ─────────────────────────────────────
-    const ajo = await prisma.circle.findUnique({
-      where: { id: ajoId },
-      select: { id: true, name: true, status: true, organizerId: true, maxRounds: true, _count: { select: { ajoParticipants: true } } },
-    });
+    const ajo = await prisma.ajoGroup.findUnique({ where: { id: ajoId } });
+    if (!ajo) return NextResponse.json({ error: 'Ajo not found' }, { status: 404 });
 
-    if (!ajo) {
-      return NextResponse.json({ error: 'Ajo group not found' }, { status: 404 });
-    }
+    // Get user address
+    const user = await prisma.user.findUnique({ where: { id: payload.userId }, select: { address: true } });
+    if (!user || !user.address) return NextResponse.json({ error: 'User address not found' }, { status: 400 });
 
-    if (ajo.status !== 'ACTIVE' && ajo.status !== 'PENDING') {
-      return NextResponse.json({ error: 'This Ajo group is not accepting new participants' }, { status: 403 });
-    }
-
-    // ── Prevent duplicate participation ───────────────────────────────────
-    const existing = await prisma.userAjoParticipation.findUnique({
-      where: { userId_ajoId: { userId: payload.userId, ajoId } },
-    });
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'You are already participating in this Ajo group', participation: existing },
-        { status: 409 },
-      );
-    }
-
-    // ── Enforce member cap (maxRounds is reused as member cap in /api/ajos) ─
-    if (ajo._count.ajoParticipants >= ajo.maxRounds) {
-      return NextResponse.json({ error: 'This Ajo group has reached its maximum number of participants' }, { status: 403 });
-    }
-
-    // ── Create off-chain participation record ─────────────────────────────
-    const participation = await prisma.userAjoParticipation.create({
+    const joinRecord = await prisma.userAjo.create({
       data: {
-        userId: payload.userId,
-        ajoId,
-        status: 'PENDING', // will be updated to CONFIRMED by on-chain event listener
-      },
-      select: {
-        id: true,
-        userId: true,
-        ajoId: true,
-        status: true,
-        onChainTxHash: true,
-        confirmedAt: true,
-        joinedAt: true,
-      },
+        userAddress: user.address,
+        ajoId: ajo.id
+      }
     });
 
-    // ── Notify organizer ──────────────────────────────────────────────────
-    await prisma.notification.create({
-      data: {
-        userId: ajo.organizerId,
-        type: 'MEMBER_JOINED',
-        title: 'New participant joined your Ajo group',
-        message: `A new member has joined "${ajo.name}". Their participation is pending on-chain confirmation.`,
-        circleId: ajoId,
-      },
-    });
-
-    return NextResponse.json({ success: true, participation }, { status: 201 });
+    return NextResponse.json({ message: 'Successfully joined Ajo' });
   } catch (err) {
     console.error('[POST /api/ajos/:id/join]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Already joined or DB error' }, { status: 500 });
   }
 }
