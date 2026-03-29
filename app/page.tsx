@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CircleList } from '@/components/dashboard/circle-list';
 import { authenticatedFetch } from '@/lib/auth-client';
-import { CircleList } from '@/components/dashboard/circle-list';
+
 
 interface Circle {
   id: string;

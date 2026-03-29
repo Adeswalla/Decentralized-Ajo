@@ -52,7 +52,6 @@ export async function POST(
       data: { totalContributed: { increment: data.amount } },
     });
 
-    // Remind all members who haven't contributed this round yet
     const allMembers = await prisma.circleMember.findMany({
       where: { circleId: id },
       include: { user: { select: { email: true, firstName: true } } },
@@ -62,14 +61,14 @@ export async function POST(
       select: { userId: true },
     });
     const contributedIds = new Set(contributedThisRound.map((c: { userId: string }) => c.userId));
+    
     for (const m of allMembers) {
       if (!contributedIds.has(m.userId)) {
-        sendContributionReminder(m.user.email, m.user.firstName, circle.contributionAmount, circle.name);
+        await sendContributionReminder(m.user.email, m.user.firstName, circle.contributionAmount, circle.name);
       }
     }
 
-    // If all members have now contributed, alert the payout recipient for this round
-    const totalContributedThisRound = contributedIds.size + 1; // +1 for current contribution
+    const totalContributedThisRound = contributedIds.size + 1;
     if (totalContributedThisRound >= allMembers.length) {
       const payoutMember = await prisma.circleMember.findFirst({
         where: { circleId: id, rotationOrder: circle.currentRound },
@@ -77,7 +76,7 @@ export async function POST(
       });
       if (payoutMember) {
         const payoutAmount = circle.contributionAmount * allMembers.length;
-        sendPayoutAlert(payoutMember.user.email, payoutMember.user.firstName, payoutAmount);
+        await sendPayoutAlert(payoutMember.user.email, payoutMember.user.firstName, payoutAmount);
       }
     }
 
