@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const UpdateProfileSchema = z.object({
   firstName: z.string().trim().min(2).max(50).optional(),
   lastName: z.string().trim().min(2).max(50).optional(),
+  email: z.string().trim().email('Invalid email format').optional(),
   username: z
     .union([
       z.literal(''),

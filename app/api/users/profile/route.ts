@@ -45,9 +45,9 @@ export async function PUT(request: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const payload = verifyToken(token);
-  if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+  if (!payload || !payload.walletAddress) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'users:profile-update', payload.userId);
+  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'users:profile-update', payload.walletAddress);
   if (rateLimited) return rateLimited;
 
   const { data, error } = await validateBody(request, UpdateProfileSchema);
@@ -55,13 +55,16 @@ export async function PUT(request: NextRequest) {
 
   try {
     const user = await prisma.user.update({
-      where: { id: payload.userId },
+      where: { walletAddress: payload.walletAddress },
       data: {
-        ...(data.firstName !== undefined && { firstName: data.firstName.trim() }),
-        ...(data.lastName !== undefined && { lastName: data.lastName.trim() }),
+        ...(data.email !== undefined && { 
+            email: data.email.trim().toLowerCase() 
+        }),
         ...(data.username !== undefined && {
           username: data.username.trim() === '' ? null : data.username.trim(),
         }),
+        ...(data.firstName !== undefined && { firstName: data.firstName.trim() }),
+        ...(data.lastName !== undefined && { lastName: data.lastName.trim() }),
         ...(data.notificationEmail !== undefined && {
           notificationEmail: data.notificationEmail.trim() === '' ? null : data.notificationEmail.trim(),
         }),
@@ -74,7 +77,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, user });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      return NextResponse.json({ error: 'That username is already taken' }, { status: 409 });
+      return NextResponse.json({ error: 'That username or email is already taken' }, { status: 409 });
     }
     console.error('Update profile error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
