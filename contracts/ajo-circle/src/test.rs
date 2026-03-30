@@ -1,143 +1,1084 @@
 #![cfg(test)]
 
-use super::*;
+//! Comprehensive test suite for the AjoCircle (Soroban ROSCA) contract.
+//!
+//! Coverage targets:
+//!   - initialize_circle  (happy path + invalid inputs + double-init)
+//!   - join_circle / add_member  (happy path + duplicate + capacity)
+//!   - deposit  (happy path + paused + disqualified + non-member)
+//!   - contribute  (happy path + wrong amount + non-member)
+//!   - claim_payout / withdraw  (happy path + paused + non-member)
+//!   - panic / resume / emergency_stop / resume_operations
+//!   - boot_dormant_member / slash_member
+//!   - shuffle_rotation
+//!   - set_kyc_status
+//!   - grant_role / revoke_role / has_role / get_deployer
+//!   - get_total_pool / get_member_balance / get_circle_state
+//!   - get_last_deposit_timestamp
+//!   - Ledger time simulation
+
+use crate::{AjoCircle, AjoCircleClient, AjoError};
 use soroban_sdk::{
-    testutils::Address as _,
+    symbol_short,
+    testutils::{Address as _, Ledger, LedgerInfo},
     token, Address, Env,
 };
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
-/// Deploy a Stellar asset contract, return (token_id, StellarAssetClient).
-fn create_token(env: &Env, admin: &Address) -> (Address, token::StellarAssetClient) {
-    let token_id = env.register_stellar_asset_contract(admin.clone());
-    let sac = token::StellarAssetClient::new(env, &token_id);
-    (token_id, sac)
+/// Canonical ledger info used throughout tests.
+fn base_ledger() -> LedgerInfo {
+    LedgerInfo {
+        timestamp: 1_000_000,
+        protocol_version: 20,
+        sequence_number: 100,
+        network_id: Default::default(),
+        base_reserve: 10,
+        min_temp_entry_ttl: 10,
+        min_persistent_entry_ttl: 10,
+        max_entry_ttl: 3_110_400,
+    }
 }
 
-/// Set up a circle with `n` members, fund the contract with the full pot.
-/// Returns (contract_id, token_id, organizer, members_vec).
-fn setup_circle(
+/// Register the contract, create a token, mint `mint_amount` to each of the
+/// returned addresses, and call `initialize_circle`.
+///
+/// Returns `(client, token_address, organizer, user_a, user_b)`.
+fn setup(
     env: &Env,
-    n: u32,
-    contribution_amount: i128,
-) -> (Address, Address, Address, soroban_sdk::Vec<Address>) {
+    contribution: i128,
+    max_members: u32,
+) -> (AjoCircleClient, Address, Address, Address, Address) {
+    env.ledger().set(base_ledger());
+
     let contract_id = env.register_contract(None, AjoCircle);
     let client = AjoCircleClient::new(env, &contract_id);
 
     let organizer = Address::generate(env);
-    let (token_id, sac) = create_token(env, &organizer);
+    let user_a = Address::generate(env);
+    let user_b = Address::generate(env);
 
-    client.initialize_circle(&organizer, &contribution_amount, &7_u32, &n);
+    let token_admin = Address::generate(env);
+    let token_address = env.register_stellar_asset_contract(token_admin.clone());
+    let token_sac = token::StellarAssetClient::new(env, &token_address);
 
-    let mut members = soroban_sdk::Vec::new(env);
-    members.push_back(organizer.clone());
-
-    for _ in 1..n {
-        let m = Address::generate(env);
-        client.add_member(&organizer, &m);
-        members.push_back(m.clone());
+    // Mint generous balances so tests never fail on insufficient funds.
+    for addr in [&organizer, &user_a, &user_b] {
+        token_sac.mint(addr, &1_000_000_i128);
     }
+    // Pre-fund the contract itself so payout transfers succeed.
+    token_sac.mint(&contract_id, &10_000_000_i128);
 
-    // Fund the contract with the full pot so token transfers succeed
-    let total_pot = (n as i128) * contribution_amount;
-    sac.mint(&contract_id, &total_pot);
+    client.initialize_circle(
+        &organizer,
+        &token_address,
+        &contribution,
+        &7_u32,   // frequency_days
+        &12_u32,  // max_rounds
+        &max_members,
+    );
 
-    (contract_id, token_id, organizer, members)
+    (client, token_address, organizer, user_a, user_b)
 }
 
-// ── tests ─────────────────────────────────────────────────────────────────────
+/// Convenience: setup with 3 members already joined.
+fn setup_with_members(
+    env: &Env,
+) -> (AjoCircleClient, Address, Address, Address, Address) {
+    let (client, token_address, organizer, user_a, user_b) = setup(env, 100, 5);
+    client.join_circle(&organizer, &user_a);
+    client.join_circle(&organizer, &user_b);
+    (client, token_address, organizer, user_a, user_b)
+}
 
-/// 1% fee on a 1000-token pot (10 members × 100).
-/// fee = 10, net = 990.
+// ─── initialize_circle ────────────────────────────────────────────────────────
+
 #[test]
-fn test_fee_1pct_round_pot() {
+fn test_initialize_circle_happy_path() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (contract_id, token_id, organizer, members) = setup_circle(&env, 10, 100);
-    let client = AjoCircleClient::new(&env, &contract_id);
-    let treasury = Address::generate(&env);
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
 
-    client.set_fee_config(&organizer, &treasury, &100_u32); // 1%
-
-    let token_client = token::Client::new(&env, &token_id);
-    let recipient = members.get(0).unwrap();
-    let net = client.claim_payout(&recipient, &token_id);
-
-    assert_eq!(net, 990_i128);
-    assert_eq!(token_client.balance(&treasury), 10_i128);
-    assert_eq!(token_client.balance(&recipient), 990_i128);
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.organizer, organizer);
+    assert_eq!(state.contribution_amount, 100);
+    assert_eq!(state.max_members, 5);
+    assert_eq!(state.current_round, 1);
+    assert_eq!(state.member_count, 1); // organizer auto-joined
 }
 
-/// 1% fee on a 999-token pot (3 members × 333).
-/// fee = floor(999 * 100 / 10000) = 9, net = 999 - 9 = 990.
-/// Verifies rounding leaves zero dust in the contract.
 #[test]
-fn test_fee_1pct_odd_pot() {
+fn test_initialize_circle_zero_contribution_fails() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (contract_id, token_id, organizer, members) = setup_circle(&env, 3, 333);
+    let contract_id = env.register_contract(None, AjoCircle);
     let client = AjoCircleClient::new(&env, &contract_id);
-    let treasury = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
 
-    client.set_fee_config(&organizer, &treasury, &100_u32); // 1%
-
-    let token_client = token::Client::new(&env, &token_id);
-    let recipient = members.get(0).unwrap();
-    let net = client.claim_payout(&recipient, &token_id);
-
-    assert_eq!(net, 990_i128);
-    assert_eq!(token_client.balance(&treasury), 9_i128);
-    assert_eq!(token_client.balance(&recipient), 990_i128);
-    // Zero dust: 999 - 9 - 990 = 0
-    assert_eq!(token_client.balance(&contract_id), 0_i128);
+    let result = client.initialize_circle(&organizer, &token, &0, &7, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
 }
 
-/// Updating fee_bps via set_fee_config correctly affects the next payout.
-/// First set 2%, then update to 5% — payout should reflect 5%.
 #[test]
-fn test_fee_config_update_affects_payout() {
+fn test_initialize_circle_negative_contribution_fails() {
     let env = Env::default();
     env.mock_all_auths();
 
-    // 2 members × 500 = 1000 pot
-    let (contract_id, token_id, organizer, members) = setup_circle(&env, 2, 500);
+    let contract_id = env.register_contract(None, AjoCircle);
     let client = AjoCircleClient::new(&env, &contract_id);
-    let treasury = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
 
-    client.set_fee_config(&organizer, &treasury, &200_u32); // 2%
-    client.set_fee_config(&organizer, &treasury, &500_u32); // update to 5%
-
-    let token_client = token::Client::new(&env, &token_id);
-    let recipient = members.get(0).unwrap();
-    let net = client.claim_payout(&recipient, &token_id);
-
-    // fee = floor(1000 * 500 / 10000) = 50, net = 950
-    assert_eq!(net, 950_i128);
-    assert_eq!(token_client.balance(&treasury), 50_i128);
-    assert_eq!(token_client.balance(&recipient), 950_i128);
+    let result = client.initialize_circle(&organizer, &token, &-50, &7, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
 }
 
-/// fee_bps = 0 must not crash and must pass the full pot to the recipient.
 #[test]
-fn test_zero_fee_no_crash() {
+fn test_initialize_circle_zero_frequency_fails() {
     let env = Env::default();
     env.mock_all_auths();
 
-    // 5 members × 200 = 1000 pot
-    let (contract_id, token_id, organizer, members) = setup_circle(&env, 5, 200);
+    let contract_id = env.register_contract(None, AjoCircle);
     let client = AjoCircleClient::new(&env, &contract_id);
-    let treasury = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
 
-    client.set_fee_config(&organizer, &treasury, &0_u32); // 0%
+    let result = client.initialize_circle(&organizer, &token, &100, &0, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
 
-    let token_client = token::Client::new(&env, &token_id);
-    let recipient = members.get(0).unwrap();
-    let net = client.claim_payout(&recipient, &token_id);
+#[test]
+fn test_initialize_circle_zero_rounds_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
 
-    assert_eq!(net, 1000_i128);
-    assert_eq!(token_client.balance(&treasury), 0_i128);
-    assert_eq!(token_client.balance(&recipient), 1000_i128);
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    let result = client.initialize_circle(&organizer, &token, &100, &7, &0, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_initialize_circle_exceeds_hard_cap_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // HARD_CAP = 100; passing 101 should fail
+    let result = client.initialize_circle(&organizer, &token, &100, &7, &12, &101);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_initialize_circle_zero_max_members_uses_default() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract(token_admin.clone());
+    token::StellarAssetClient::new(&env, &token).mint(&organizer, &1_000_000);
+
+    // max_members = 0 → contract uses MAX_MEMBERS (50)
+    let result = client.initialize_circle(&organizer, &token, &100, &7, &12, &0);
+    assert_eq!(result, Ok(()));
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.max_members, 50);
+}
+
+// ─── join_circle / add_member ─────────────────────────────────────────────────
+
+#[test]
+fn test_join_circle_happy_path() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    let result = client.join_circle(&organizer, &user_a);
+    assert_eq!(result, Ok(()));
+
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.member_count, 2);
+}
+
+#[test]
+fn test_join_circle_three_members_increments_count() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup(&env, 100, 5);
+
+    client.join_circle(&organizer, &user_a).unwrap();
+    client.join_circle(&organizer, &user_b).unwrap();
+
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.member_count, 3);
+}
+
+#[test]
+fn test_join_circle_duplicate_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    client.join_circle(&organizer, &user_a).unwrap();
+    let result = client.join_circle(&organizer, &user_a);
+    assert_eq!(result, Err(AjoError::AlreadyExists));
+}
+
+#[test]
+fn test_join_circle_at_capacity_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // max_members = 2; organizer already occupies slot 1
+    let (client, _tok, organizer, user_a, user_b) = setup(&env, 100, 2);
+
+    client.join_circle(&organizer, &user_a).unwrap(); // fills slot 2
+
+    // user_b should be rejected
+    let result = client.join_circle(&organizer, &user_b);
+    assert_eq!(result, Err(AjoError::CircleAtCapacity));
+}
+
+#[test]
+fn test_add_member_is_alias_for_join_circle() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    let result = client.add_member(&organizer, &user_a);
+    assert_eq!(result, Ok(()));
+
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.member_count, 2);
+}
+
+#[test]
+fn test_join_circle_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    let result = client.join_circle(&organizer, &user);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+// ─── deposit ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_deposit_happy_path_updates_pool_and_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token_address, organizer, _a, _b) = setup(&env, 100, 5);
+    let token_client = token::Client::new(&env, &token_address);
+
+    let before = token_client.balance(&organizer);
+    client.deposit(&organizer).unwrap();
+
+    assert_eq!(token_client.balance(&organizer), before - 100);
+    assert_eq!(client.get_total_pool(), 100);
+
+    let data = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(data.total_contributed, 100);
+}
+
+#[test]
+fn test_deposit_three_members_pool_accumulates() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup_with_members(&env);
+
+    client.deposit(&organizer).unwrap();
+    client.deposit(&user_a).unwrap();
+    client.deposit(&user_b).unwrap();
+
+    assert_eq!(client.get_total_pool(), 300);
+}
+
+#[test]
+fn test_deposit_records_timestamp() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    let mut info = base_ledger();
+    info.timestamp = 5_000;
+    env.ledger().set(info);
+
+    client.deposit(&organizer).unwrap();
+
+    assert_eq!(client.get_last_deposit_timestamp(&organizer), Ok(5_000_u64));
+}
+
+#[test]
+fn test_deposit_blocked_when_paused() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.panic(&organizer).unwrap();
+    let result = client.deposit(&organizer);
+    assert_eq!(result, Err(AjoError::CirclePanicked));
+}
+
+#[test]
+fn test_deposit_fails_for_non_member() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, _a, _b) = setup(&env, 100, 5);
+    let stranger = Address::generate(&env);
+
+    let result = client.deposit(&stranger);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_deposit_fails_for_disqualified_member() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    client.boot_dormant_member(&organizer, &user_a).unwrap();
+    let result = client.deposit(&user_a);
+    assert_eq!(result, Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_deposit_fails_after_three_slashes() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+
+    let result = client.deposit(&user_a);
+    assert_eq!(result, Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_deposit_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let member = Address::generate(&env);
+
+    assert_eq!(client.deposit(&member), Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_deposit_multiple_rounds_accumulates_contributed() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.deposit(&organizer).unwrap();
+    client.deposit(&organizer).unwrap();
+    client.deposit(&organizer).unwrap();
+
+    let data = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(data.total_contributed, 300);
+    assert_eq!(client.get_total_pool(), 300);
+}
+
+// ─── contribute ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_contribute_exact_amount_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token_address, organizer, _a, _b) = setup(&env, 100, 5);
+    let token_client = token::Client::new(&env, &token_address);
+
+    let before = token_client.balance(&organizer);
+    client.contribute(&organizer, &100).unwrap();
+
+    assert_eq!(token_client.balance(&organizer), before - 100);
+    assert_eq!(client.get_total_pool(), 100);
+}
+
+#[test]
+fn test_contribute_wrong_amount_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    // Partial amount
+    let result = client.contribute(&organizer, &50);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+
+    // Excess amount
+    let result2 = client.contribute(&organizer, &200);
+    assert_eq!(result2, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_contribute_non_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, _a, _b) = setup(&env, 100, 5);
+    let stranger = Address::generate(&env);
+
+    let result = client.contribute(&stranger, &100);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_contribute_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let member = Address::generate(&env);
+
+    assert_eq!(client.contribute(&member, &100), Err(AjoError::NotFound));
+}
+
+// ─── claim_payout / withdraw ──────────────────────────────────────────────────
+
+#[test]
+fn test_claim_payout_happy_path() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token_address, organizer, user_a, user_b) = setup_with_members(&env);
+    let token_client = token::Client::new(&env, &token_address);
+
+    // All three members deposit so the pool is funded
+    client.deposit(&organizer).unwrap();
+    client.deposit(&user_a).unwrap();
+    client.deposit(&user_b).unwrap();
+
+    let before = token_client.balance(&organizer);
+    let payout = client.claim_payout(&organizer, &1).unwrap();
+
+    // payout = member_count * contribution_amount = 3 * 100 = 300
+    assert_eq!(payout, 300);
+    assert_eq!(token_client.balance(&organizer), before + 300);
+
+    let data = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(data.total_withdrawn, 300);
+    assert_eq!(data.has_received_payout, true);
+}
+
+#[test]
+fn test_claim_payout_correct_amount_scales_with_member_count() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Only organizer in circle (member_count = 1)
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    let payout = client.claim_payout(&organizer, &1).unwrap();
+    assert_eq!(payout, 100); // 1 * 100
+}
+
+#[test]
+fn test_claim_payout_blocked_when_paused() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.panic(&organizer).unwrap();
+    let result = client.claim_payout(&organizer, &1);
+    assert_eq!(result, Err(AjoError::CirclePanicked));
+}
+
+#[test]
+fn test_claim_payout_non_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, _a, _b) = setup(&env, 100, 5);
+    let stranger = Address::generate(&env);
+
+    let result = client.claim_payout(&stranger, &1);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_claim_payout_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let member = Address::generate(&env);
+
+    assert_eq!(client.claim_payout(&member, &1), Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_withdraw_is_alias_for_claim_payout() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    let result = client.withdraw(&organizer, &1);
+    assert_eq!(result, Ok(100));
+}
+
+#[test]
+fn test_claim_payout_accumulates_total_withdrawn() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.claim_payout(&organizer, &1).unwrap();
+    client.claim_payout(&organizer, &2).unwrap();
+
+    let data = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(data.total_withdrawn, 200);
+}
+
+#[test]
+fn test_get_total_pool_reflects_deposits() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup_with_members(&env);
+
+    assert_eq!(client.get_total_pool(), 0);
+
+    client.deposit(&organizer).unwrap();
+    assert_eq!(client.get_total_pool(), 100);
+
+    client.deposit(&user_a).unwrap();
+    client.deposit(&user_b).unwrap();
+    assert_eq!(client.get_total_pool(), 300);
+}
+
+// ─── panic / resume / emergency_stop / resume_operations ─────────────────────
+
+#[test]
+fn test_panic_pauses_contract() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.panic(&organizer).unwrap();
+    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+}
+
+#[test]
+fn test_resume_unpauses_contract() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.panic(&organizer).unwrap();
+    client.resume(&organizer).unwrap();
+
+    // deposit should succeed again
+    assert_eq!(client.deposit(&organizer), Ok(()));
+}
+
+#[test]
+fn test_emergency_stop_is_alias_for_panic() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.emergency_stop(&organizer).unwrap();
+    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+}
+
+#[test]
+fn test_resume_operations_is_alias_for_resume() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.emergency_stop(&organizer).unwrap();
+    client.resume_operations(&organizer).unwrap();
+
+    assert_eq!(client.deposit(&organizer), Ok(()));
+}
+
+#[test]
+fn test_panic_by_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, _b) = setup(&env, 100, 5);
+
+    // user_a is not admin; should be rejected
+    let result = client.panic(&user_a);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_resume_by_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    client.panic(&organizer).unwrap();
+    let result = client.resume(&user_a);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+// ─── boot_dormant_member / slash_member ──────────────────────────────────────
+
+#[test]
+fn test_boot_dormant_member_deactivates_member() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    client.boot_dormant_member(&organizer, &user_a).unwrap();
+
+    // Booted member cannot deposit
+    assert_eq!(client.deposit(&user_a), Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_boot_dormant_member_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, user_b) = setup_with_members(&env);
+
+    let result = client.boot_dormant_member(&user_a, &user_b);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_boot_dormant_member_unknown_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+    let stranger = Address::generate(&env);
+
+    let result = client.boot_dormant_member(&organizer, &stranger);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_slash_member_increments_missed_count() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    // Two slashes — member still active
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    // deposit should still work
+    assert_eq!(client.deposit(&user_a), Ok(()));
+}
+
+#[test]
+fn test_slash_member_three_times_disqualifies() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+
+    assert_eq!(client.deposit(&user_a), Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_slash_member_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, user_b) = setup_with_members(&env);
+
+    let result = client.slash_member(&user_a, &user_b);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+// ─── shuffle_rotation ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_shuffle_rotation_succeeds_with_members() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup_with_members(&env);
+
+    let result = client.shuffle_rotation(&organizer);
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
+fn test_shuffle_rotation_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, _b) = setup_with_members(&env);
+
+    let result = client.shuffle_rotation(&user_a);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_shuffle_rotation_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    let result = client.shuffle_rotation(&admin);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+// ─── set_kyc_status ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_set_kyc_status_by_admin_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    let result = client.set_kyc_status(&organizer, &user_a, &true);
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
+fn test_set_kyc_status_by_non_admin_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, user_b) = setup_with_members(&env);
+
+    let result = client.set_kyc_status(&user_a, &user_b, &true);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+// ─── role management ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_get_deployer_returns_organizer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    assert_eq!(client.get_deployer(), Ok(organizer));
+}
+
+#[test]
+fn test_get_deployer_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+
+    assert_eq!(client.get_deployer(), Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_has_role_deployer_always_true() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    // Deployer implicitly holds every role
+    assert!(client.has_role(&symbol_short!("ADMIN"), &organizer));
+    assert!(client.has_role(&symbol_short!("MANAGER"), &organizer));
+}
+
+#[test]
+fn test_has_role_non_member_false() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, _b) = setup(&env, 100, 5);
+
+    assert!(!client.has_role(&symbol_short!("ADMIN"), &user_a));
+}
+
+#[test]
+fn test_grant_role_by_deployer_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    let result = client.grant_role(&organizer, &symbol_short!("MANAGER"), &user_a);
+    assert_eq!(result, Ok(()));
+    assert!(client.has_role(&symbol_short!("MANAGER"), &user_a));
+}
+
+#[test]
+fn test_grant_role_duplicate_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    client.grant_role(&organizer, &symbol_short!("MANAGER"), &user_a).unwrap();
+    let result = client.grant_role(&organizer, &symbol_short!("MANAGER"), &user_a);
+    assert_eq!(result, Err(AjoError::AlreadyExists));
+}
+
+#[test]
+fn test_grant_role_by_non_deployer_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, user_b) = setup(&env, 100, 5);
+
+    let result = client.grant_role(&user_a, &symbol_short!("MANAGER"), &user_b);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_revoke_role_by_deployer_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    client.grant_role(&organizer, &symbol_short!("MANAGER"), &user_a).unwrap();
+    let result = client.revoke_role(&organizer, &symbol_short!("MANAGER"), &user_a);
+    assert_eq!(result, Ok(()));
+    assert!(!client.has_role(&symbol_short!("MANAGER"), &user_a));
+}
+
+#[test]
+fn test_revoke_role_not_found_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+
+    // user_a never had MANAGER role
+    let result = client.revoke_role(&organizer, &symbol_short!("MANAGER"), &user_a);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_revoke_deployer_admin_role_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    // Deployer's own ADMIN role cannot be revoked
+    let result = client.revoke_role(&organizer, &symbol_short!("ADMIN"), &organizer);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_revoke_role_by_non_deployer_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup(&env, 100, 5);
+
+    client.grant_role(&organizer, &symbol_short!("MANAGER"), &user_b).unwrap();
+    let result = client.revoke_role(&user_a, &symbol_short!("MANAGER"), &user_b);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+// ─── emergency_panic ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_emergency_panic_by_deployer_pauses_contract() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    client.emergency_panic(&organizer).unwrap();
+    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+}
+
+#[test]
+fn test_emergency_panic_by_non_deployer_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, user_a, _b) = setup(&env, 100, 5);
+
+    let result = client.emergency_panic(&user_a);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+// ─── ledger time simulation ───────────────────────────────────────────────────
+
+#[test]
+fn test_ledger_time_simulation_deadline_advances() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    // Simulate 8 days passing (past the 7-day frequency window)
+    let mut info = base_ledger();
+    info.timestamp = 1_000_000 + 8 * 86_400;
+    env.ledger().set(info);
+
+    // Contract should still accept deposits (deadline enforcement is not
+    // implemented in the current contract version, but the ledger state
+    // is correctly reflected in timestamps)
+    let result = client.deposit(&organizer);
+    assert_eq!(result, Ok(()));
+
+    let ts = client.get_last_deposit_timestamp(&organizer).unwrap();
+    assert_eq!(ts, 1_000_000 + 8 * 86_400);
+}
+
+#[test]
+fn test_ledger_sequence_number_advances() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    let mut info = base_ledger();
+    info.sequence_number = 999;
+    info.timestamp = 2_000_000;
+    env.ledger().set(info);
+
+    client.deposit(&organizer).unwrap();
+    assert_eq!(client.get_last_deposit_timestamp(&organizer), Ok(2_000_000_u64));
+}
+
+// ─── query helpers ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_get_circle_state_not_initialized_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+
+    assert_eq!(client.get_circle_state(), Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_get_member_balance_non_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, _a, _b) = setup(&env, 100, 5);
+    let stranger = Address::generate(&env);
+
+    assert_eq!(client.get_member_balance(&stranger), Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_get_last_deposit_timestamp_before_deposit_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
+
+    // No deposit made yet
+    assert_eq!(
+        client.get_last_deposit_timestamp(&organizer),
+        Err(AjoError::NotFound)
+    );
+}
+
+#[test]
+fn test_get_total_pool_initially_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, _organizer, _a, _b) = setup(&env, 100, 5);
+
+    assert_eq!(client.get_total_pool(), 0);
+}
+
+// ─── full happy-path simulation ───────────────────────────────────────────────
+
+/// End-to-end: 3 members join, all contribute, scheduled recipient claims payout.
+/// Verifies pool accounting and payout correctness.
+#[test]
+fn test_full_happy_path_three_members_contribute_and_payout() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token_address, organizer, user_a, user_b) = setup(&env, 100, 5);
+    let token_client = token::Client::new(&env, &token_address);
+
+    // Step 1 – join
+    client.join_circle(&organizer, &user_a).unwrap();
+    client.join_circle(&organizer, &user_b).unwrap();
+
+    let state = client.get_circle_state().unwrap();
+    assert_eq!(state.member_count, 3);
+
+    // Step 2 – all contribute
+    client.deposit(&organizer).unwrap();
+    client.deposit(&user_a).unwrap();
+    client.deposit(&user_b).unwrap();
+
+    assert_eq!(client.get_total_pool(), 300);
+
+    // Step 3 – scheduled recipient (user_a) claims payout
+    let before = token_client.balance(&user_a);
+    let payout = client.claim_payout(&user_a, &1).unwrap();
+
+    assert_eq!(payout, 300); // 3 members * 100
+    assert_eq!(token_client.balance(&user_a), before + 300);
+
+    let data = client.get_member_balance(&user_a).unwrap();
+    assert_eq!(data.total_withdrawn, 300);
+    assert_eq!(data.has_received_payout, true);
+
+    // Step 4 – verify other members' state unchanged
+    let org_data = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(org_data.total_withdrawn, 0);
+    assert_eq!(org_data.has_received_payout, false);
 }

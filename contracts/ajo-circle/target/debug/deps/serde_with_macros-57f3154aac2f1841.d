@@ -1,0 +1,8 @@
+C:\Users\machintosh\Documents\new wave\Decentralized-Ajo\contracts\ajo-circle\target\debug\deps\serde_with_macros-57f3154aac2f1841.d: C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lib.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\apply.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lazy_bool.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\utils.rs
+
+C:\Users\machintosh\Documents\new wave\Decentralized-Ajo\contracts\ajo-circle\target\debug\deps\serde_with_macros-57f3154aac2f1841.dll: C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lib.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\apply.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lazy_bool.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\utils.rs
+
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lib.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\apply.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\lazy_bool.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.12.0\src\utils.rs:
