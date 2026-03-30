@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title Ajo
  * @dev A simple rotating savings and credit association (ROSCA) contract.
  * Includes a pause mechanism for emergency situations.
  */
-contract Ajo is Pausable, AccessControl {
-    uint256 public contributionAmount;
+contract Ajo is Initializable, Pausable, AccessControl {
+    AggregatorV3Interface internal ethUsdPriceFeed;
+    
+    address private constant SEPOLIA_ETH_USD_FEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+    address private constant MAINNET_ETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    
+    uint256 public contributionAmountUSD;
+    uint256 public contributionAmountEth;
     uint256 public cycleDuration;
     uint32 public currentCycle;
     uint256 public maxMembers;
@@ -40,24 +48,65 @@ contract Ajo is Pausable, AccessControl {
     error InvalidContribution();
     error AjoIsFull();
 
+    error InvalidPrice();
+    error PriceFeedUnavailable();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
+    function getLatestPrice() public view returns (int256) {
+        (
+            /*uint80 roundID*/,
+            int256 price,
+            /*uint256 startedAt*/,
+            /*uint256 timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = ethUsdPriceFeed.latestRoundData();
+        
+        if (price <= 0) {
+            revert PriceFeedUnavailable();
+        }
+        
+        return price;
+    }
+
+    function usdToEth(uint256 _usdAmount) public view returns (uint256) {
+        int256 ethPrice = getLatestPrice();
+        uint256 ethAmount = (_usdAmount * 1e18) / (uint256(ethPrice) * 1e10);
+        return ethAmount;
+    }
+
+    function ethToUsd(uint256 _ethAmount) public view returns (uint256) {
+        int256 ethPrice = getLatestPrice();
+        uint256 usdAmount = (_ethAmount * uint256(ethPrice) * 1e10) / 1e18;
+        return usdAmount;
+    }
+
     /**
      * @dev Initializes the Ajo pool with core parameters
-     * @param _amount The amount required for each contribution
+     * @param _amountUSD The amount required for each contribution in USD (8 decimals)
+     * @param _cycleDuration Duration of each cycle in seconds
      * @param _maxMembers The maximum capacity of the pool
-     * @param _admin The administrator of the pool
+     * @param _priceFeedAddress Chainlink price feed address (use address(0) for default Sepolia)
      */
-    constructor(
-        uint256 _contributionAmount,
+    function initialize(
+        uint256 _amountUSD,
         uint256 _cycleDuration,
-        uint256 _maxMembers
-    ) {
+        uint256 _maxMembers,
+        address _priceFeedAddress
+    ) external {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        contributionAmount = _contributionAmount;
+        
+        if (_priceFeedAddress == address(0)) {
+            ethUsdPriceFeed = AggregatorV3Interface(SEPOLIA_ETH_USD_FEED);
+        } else {
+            ethUsdPriceFeed = AggregatorV3Interface(_priceFeedAddress);
+        }
+        
+        contributionAmountUSD = _amountUSD;
+        contributionAmountEth = usdToEth(_amountUSD);
         cycleDuration = _cycleDuration;
         maxMembers = _maxMembers;
         currentCycle = 1;
@@ -79,11 +128,11 @@ contract Ajo is Pausable, AccessControl {
 
     /**
      * @notice Allows a member to deposit the required contribution amount.
-     * @dev Enforces strict deposit of contributionAmount and updates pool state.
+     * @dev Enforces strict deposit of contributionAmountEth and updates pool state.
      * Can only be called when the contract is not paused.
      */
     function deposit() external payable whenNotPaused {
-        if(msg.value != contributionAmount) revert InvalidContribution();
+        if(msg.value != contributionAmountEth) revert InvalidContribution();
         if(members.length >= maxMembers) revert AjoIsFull();
 
         bool isNewMember = balances[msg.sender] == 0;
@@ -95,6 +144,22 @@ contract Ajo is Pausable, AccessControl {
         totalPool += msg.value;
 
         emit Deposited(msg.sender, msg.value);
+    }
+
+    /**
+     * @notice Update contribution amount (recalculates ETH equivalent)
+     * @param _newAmountUSD New contribution amount in USD (8 decimals)
+     */
+    function updateContributionAmount(uint256 _newAmountUSD) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        contributionAmountUSD = _newAmountUSD;
+        contributionAmountEth = usdToEth(_newAmountUSD);
+    }
+
+    /**
+     * @notice Get current ETH amount for contribution
+     */
+    function getContributionAmountEth() external view returns (uint256) {
+        return contributionAmountEth;
     }
 
     /// @notice Get all member addresses
