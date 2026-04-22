@@ -1,15 +1,15 @@
 'use client';
 
 import React from 'react';
-import { useWallet } from '@/lib/wallet-context';
+import { Info, Wallet } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
 import { DashboardCard } from './dashboard-card';
 import { DashboardCardSkeleton } from './dashboard-card-skeleton';
 import { DashboardSkeleton } from './dashboard/dashboard-skeleton';
 import { UpcomingCycles } from './dashboard/upcoming-cycles';
 import { UpcomingCyclesSkeleton } from './dashboard/upcoming-cycles-skeleton';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Wallet, Info } from 'lucide-react';
+import { useWallet } from '@/lib/wallet-context';
 
 interface AjoGroup {
   id: string;
@@ -23,18 +23,24 @@ interface DashboardProps {
   loading?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = false }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+  activeGroups,
+  loading = false,
+}) => {
   const { isConnected, connectWallet, isLoading } = useWallet();
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] w-full animate-in fade-in zoom-in duration-500">
-        <div className="p-6 bg-primary/10 rounded-full text-primary mb-6 border-4 border-primary/20">
+      <div className="flex min-h-[70vh] w-full flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+        <div className="mb-6 rounded-full border-4 border-primary/20 bg-primary/10 p-6 text-primary">
           <Wallet size={48} />
         </div>
-        <h2 className="text-3xl font-bold text-foreground mb-3 text-center">Connect Your Wallet</h2>
-        <p className="text-muted-foreground mb-8 max-w-md text-center">
-          Connect your Stellar wallet to view your Ajo groups, pooled balances, and upcoming payment cycles.
+        <h2 className="mb-3 text-center text-3xl font-bold text-foreground">
+          Connect Your Wallet
+        </h2>
+        <p className="mb-8 max-w-md text-center text-muted-foreground">
+          Connect your Stellar wallet to view your Ajo groups, pooled balances,
+          and upcoming payment cycles.
         </p>
         <Button
           onClick={connectWallet}
@@ -53,44 +59,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = fa
   }
 
   return (
-    <div className="border-b border-border bg-card">
+    <section className="border-b border-border bg-card">
       <div className="container mx-auto px-4 py-8">
         <header className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">My Ajo Overview</h1>
-          <p className="text-muted-foreground mt-1">
-            Track your active deposits and pooled savings in real-time.
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            My Ajo Overview
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Track your active deposits and pooled savings in real time.
           </p>
         </header>
 
-      {/* 3. & 4. Data Rendering and Grid Responsiveness */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[1, 2, 3].map((i) => (
-            <DashboardCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : activeGroups.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {activeGroups.map((group) => (
-            <DashboardCard
-              key={group.id}
-              title={group.name}
-              pooledBalance={group.balance}
-              nextPayout={group.nextCycle}
-            />
-          ))}
-        </div>
-      ) : (
-        /* 6. Edge Cases - Empty State */
-        <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-3xl bg-muted/20 text-center">
-          <div className="p-4 bg-muted rounded-full text-muted-foreground mb-4">
-            <Info size={32} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Active group cards — takes 2/3 width on large screens */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            {activeGroups.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeGroups.map((group: AjoGroup) => (
+            {loading ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {[1, 2, 3, 4].map((item) => (
+                  <DashboardCardSkeleton key={item} />
+                ))}
+              </div>
+            ) : activeGroups.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {activeGroups.map((group) => (
                   <DashboardCard
                     key={group.id}
                     title={group.name}
@@ -100,19 +90,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = fa
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-2xl bg-muted/20 text-center h-full min-h-[180px]">
-                <div className="p-3 bg-muted rounded-full text-muted-foreground mb-3">
-                  <Info size={28} />
+              <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl border-2 border-dashed bg-muted/20 p-12 text-center">
+                <div className="mb-4 rounded-full bg-muted p-4 text-muted-foreground">
+                  <Info size={32} />
                 </div>
-                <h3 className="text-lg font-semibold mb-1">No Active Groups</h3>
-                <p className="text-muted-foreground text-sm max-w-xs">
-                  You haven't joined any active Ajo circles yet. Create or join one to get started.
+                <h3 className="mb-2 text-xl font-semibold text-foreground">
+                  No Active Groups
+                </h3>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  You haven&apos;t joined any active Ajo circles yet. Create or
+                  join one to get started.
                 </p>
                 <Button
                   variant="outline"
                   size="sm"
                   className="mt-4"
-                  onClick={() => (window.location.href = '/circles/join')}
+                  onClick={() => {
+                    window.location.href = '/circles/join';
+                  }}
                 >
                   Find Ajo Groups
                 </Button>
@@ -120,12 +115,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeGroups, loading = fa
             )}
           </div>
 
-          {/* Upcoming cycles sidebar */}
           <div className="lg:col-span-1">
-            <UpcomingCycles />
+            {loading ? <UpcomingCyclesSkeleton /> : <UpcomingCycles />}
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

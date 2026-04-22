@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import { ASSET_DECIMALS } from "@/lib/utils";
 
 type AssetUnit = "XLM" | "USDC";
 
@@ -13,24 +14,28 @@ interface AmountInputProps {
 }
 
 // Converts any numeric string (including scientific notation) to a plain decimal string
-function toPlainDecimal(value: string | number): string {
+function toPlainDecimal(value: string | number, decimals: number): string {
   const num = typeof value === "number" ? value : parseFloat(value);
   if (isNaN(num)) return "0";
-  // toFixed(7) handles scientific notation and caps at 7 decimal places
-  return num.toFixed(7).replace(/\.?0+$/, "");
+  return num.toFixed(decimals).replace(/\.?0+$/, "");
 }
 
-// Validates input: digits with optional decimal point, up to 7 decimal places
-const VALID_PATTERN = /^\d*\.?\d{0,7}$/;
+// Build a regex that allows up to `decimals` decimal places
+function buildPattern(decimals: number): RegExp {
+  return new RegExp(`^\\d*\\.?\\d{0,${decimals}}$`);
+}
 
 export function AmountInput({
   unit = "XLM",
   balance,
   onValueChange,
-  placeholder = "0.0000000",
+  placeholder,
   disabled = false,
 }: AmountInputProps) {
   const [inputValue, setInputValue] = useState("");
+  const decimals = ASSET_DECIMALS[unit] ?? 7;
+  const validPattern = buildPattern(decimals);
+  const resolvedPlaceholder = placeholder ?? `0.${"0".repeat(decimals)}`;
 
   const balanceNum = parseFloat(String(balance));
   const inputNum = parseFloat(inputValue);
@@ -41,27 +46,25 @@ export function AmountInput({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
 
-      // Allow clearing the field
       if (raw === "") {
         setInputValue("");
         onValueChange("");
         return;
       }
 
-      // Only allow valid numeric pattern with up to 7 decimals
-      if (!VALID_PATTERN.test(raw)) return;
+      if (!validPattern.test(raw)) return;
 
       setInputValue(raw);
       onValueChange(raw);
     },
-    [onValueChange]
+    [onValueChange, validPattern]
   );
 
   const handleMax = useCallback(() => {
-    const plain = toPlainDecimal(balance);
+    const plain = toPlainDecimal(balance, decimals);
     setInputValue(plain);
     onValueChange(plain);
-  }, [balance, onValueChange]);
+  }, [balance, decimals, onValueChange]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -84,7 +87,7 @@ export function AmountInput({
           inputMode="decimal"
           value={inputValue}
           onChange={handleChange}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           disabled={disabled}
           className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground min-w-0"
         />
@@ -103,7 +106,7 @@ export function AmountInput({
       {/* Balance display + warning */}
       <div className="flex items-center justify-between px-1">
         <span className="text-xs text-muted-foreground">
-          Balance: {toPlainDecimal(balance)} {unit}
+          Balance: {toPlainDecimal(balance, decimals)} {unit}
         </span>
         {exceedsBalance && (
           <span className="text-xs text-destructive font-medium">

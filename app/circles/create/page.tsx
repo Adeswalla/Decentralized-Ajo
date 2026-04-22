@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 
 export default function CreateCirclePage() {
   const router = useRouter();
@@ -248,7 +249,7 @@ export default function CreateCirclePage() {
                     <span className="text-muted-foreground">Payout Per Round:</span>{' '}
                     <span className="font-semibold">
                       {formData.contributionAmount && formData.maxRounds
-                        ? `${(parseFloat(formData.contributionAmount) * parseInt(formData.maxRounds)).toFixed(2)} XLM`
+                        ? `${formatAmount(parseFloat(formData.contributionAmount) * parseInt(formData.maxRounds))} XLM`
                         : '-'}
                     </span>
                   </p>

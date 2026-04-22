@@ -251,6 +251,14 @@ Content-Type: application/json
 }
 ```
 
+#### Get Transaction History
+```http
+GET /api/transactions?page=1&sortBy=createdAt&order=desc
+Authorization: Bearer <token>
+```
+
+See [Detailed Documentation](./docs/TRANSACTION_HISTORY.md) for strategy and blockchain verification details.
+
 ## Smart Contract
 
 ### Soroban Contract Features

@@ -4,7 +4,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Users, PlusCircle, Wallet, TrendingUp, CircleDot, ArrowRight, Search, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Input } from '@/components/ui/input';
@@ -13,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { CircleList } from '@/components/dashboard/circle-list';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 import {
   Pagination,
   PaginationContent,
@@ -99,24 +108,7 @@ export default function Home() {
     if (filterType === 'search') setSearchQuery('');
   };
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    setIsAuthenticated(true);
-    const user = localStorage.getItem('user');
-    if (user) {
-      const userData = JSON.parse(user);
-      setUserName(userData.firstName || userData.email);
-    }
-
-    fetchCircles();
-  }, []);
-
-  const fetchCircles = async () => {
+  const fetchCircles = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
@@ -136,13 +128,30 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, debouncedSearchQuery, durationFilter, sortBy, statusFilter]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    setIsAuthenticated(true);
+    const user = localStorage.getItem('user');
+    if (user) {
+      const userData = JSON.parse(user);
+      setUserName(userData.firstName || userData.email);
+    }
+
+    fetchCircles();
+  }, [fetchCircles]);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchCircles();
     }
-  }, [debouncedSearchQuery, statusFilter, durationFilter, sortBy, currentPage, isAuthenticated]);
+  }, [fetchCircles, isAuthenticated]);
 
   if (!isAuthenticated) {
     return <LandingPage />;
@@ -211,7 +220,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {circles.reduce((acc, c) => acc + (c.contributionAmount || 0), 0).toFixed(2)} XLM
+                {formatAmount(circles.reduce((acc, c) => acc + (c.contributionAmount || 0), 0))} XLM
               </div>
               <p className="text-xs text-muted-foreground">Combined contributions</p>
             </CardContent>

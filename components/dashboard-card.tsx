@@ -4,6 +4,7 @@ import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Wallet, Calendar, TrendingUp } from 'lucide-react';
+import { formatAmount } from '@/lib/utils';
 
 interface DashboardCardProps {
   title: string;
@@ -38,7 +39,7 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
               Pooled Balance
             </p>
             <p className="text-lg font-mono font-bold text-foreground">
-              {typeof pooledBalance === 'number' ? `${pooledBalance.toLocaleString()} XLM` : pooledBalance}
+              {typeof pooledBalance === 'number' ? `${formatAmount(pooledBalance)} XLM` : pooledBalance}
             </p>
           </div>
         </div>

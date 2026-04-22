@@ -5,7 +5,7 @@ const config: Config.InitialOptions = {
     // UI / component tests — browser-like environment
     {
       displayName: 'ui',
-      testMatch: ['<rootDir>/components/**/*.test.[jt]s?(x)'],
+      testMatch: ['<rootDir>/components/**/*.test.[jt]s?(x)', '<rootDir>/app/**/*.test.[jt]s?(x)'],
       transform: { '^.+\\.[tj]sx?$': 'ts-jest' },
       testEnvironment: 'jest-environment-jsdom',
       setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],

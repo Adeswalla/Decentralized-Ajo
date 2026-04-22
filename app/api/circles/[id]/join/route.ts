@@ -87,6 +87,13 @@ export async function POST(
       return NextResponse.json({ error: 'This circle is not accepting new members' }, { status: 403 });
     }
 
+    if (circle.members.length >= MAX_MEMBERS) {
+      return NextResponse.json(
+        { error: `Circle has reached the maximum of ${MAX_MEMBERS} members` },
+        { status: 403 }
+      );
+    }
+
     const newMember = await prisma.circleMember.create({
       data: {
         circleId: id,

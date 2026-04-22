@@ -19,8 +19,15 @@ use soroban_sdk::{
     Symbol, Vec,
 };
 
-const MAX_MEMBERS: u32 = 50;
-const HARD_CAP: u32 = 100;
+pub const MAX_MEMBERS: u32 = 50;
+pub const MIN_CONTRIBUTION_AMOUNT: u128 = 1000000;
+pub const MAX_CONTRIBUTION_AMOUNT: u128 = 10000000000;
+pub const MIN_FREQUENCY_DAYS: u32 = 1;
+pub const MAX_FREQUENCY_DAYS: u32 = 365;
+pub const MIN_ROUNDS: u32 = 2;
+pub const MAX_ROUNDS: u32 = 100;
+pub const WITHDRAWAL_PENALTY_PERCENT: u32 = 10;
+// LIMIT_SYNC_TAG: v1.0.2
 
 // ---------------- ROLE CONSTANTS ----------------
 const ADMIN_ROLE: Symbol = symbol_short!("ADMIN");

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { TransactionTable, type Transaction } from '@/components/transaction-table';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 
 // The interface and statusVariant are no longer needed here 
 // because they are imported from '@/components/transaction-table'
@@ -119,7 +120,7 @@ export default function TransactionsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {tx.amount.toFixed(2)} XLM
+                      {formatAmount(tx.amount)} XLM
                     </TableCell>
                   </TableRow>
                 ))}

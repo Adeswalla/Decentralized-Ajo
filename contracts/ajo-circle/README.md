@@ -190,6 +190,16 @@ native_amount_for_usd(usd_amount: i128) -> i128
 - Converts USD amounts to native tokens
 - Supports configurable decimal precision
 
+### 10. Static Analysis Baseline
+
+- Decision record: `adr/0001-static-analysis-formal-methods-evaluation.md`
+- Automated baseline check: nightly GitHub Action at `.github/workflows/contracts-static-analysis-nightly.yml`
+- Current baseline command:
+
+```bash
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
 ## Data Structures
 
 ### CircleData

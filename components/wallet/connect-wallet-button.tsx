@@ -51,7 +51,7 @@ export function ConnectWalletButton() {
         {({ account, openAccountModal }) => (
           <div className="flex flex-col items-end gap-2">
             <Button onClick={openAccountModal} variant="outline" className="gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <div className="h-2 w-2 rounded-full bg-success" />
               {ensName || formatAddress(account.address)}
             </Button>
 

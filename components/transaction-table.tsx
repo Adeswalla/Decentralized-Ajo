@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatAmount } from '@/lib/utils';
 
 export interface Transaction {
   id: string;
@@ -81,7 +81,7 @@ export function TransactionTable({ transactions, onSort, sortBy, order }: Transa
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {tx.amount.toFixed(2)} XLM
+                  {formatAmount(tx.amount)} XLM
                 </TableCell>
               </TableRow>
             ))}
@@ -107,7 +107,7 @@ export function TransactionTable({ transactions, onSort, sortBy, order }: Transa
             <span className="text-sm text-muted-foreground md:text-black">
               {new Date(tx.createdAt).toLocaleDateString()}
             </span>
-            <span className="font-semibold">{tx.amount.toFixed(2)} XLM</span>
+            <span className="font-semibold">{formatAmount(tx.amount)} XLM</span>
             <span className="text-blue-600">
               <Link href={`/circles/${tx.circle.id}`} className="hover:underline">
                 {tx.circle.name}
@@ -143,7 +143,7 @@ export function TransactionCard({ transaction }: { transaction: Transaction }) {
             })}
           </p>
           <p className="text-xl font-bold tracking-tight">
-            {transaction.amount.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">XLM</span>
+            {formatAmount(transaction.amount)} <span className="text-sm font-normal text-muted-foreground">XLM</span>
           </p>
         </div>
         <Badge variant={statusVariant[transaction.status] ?? 'secondary'} className="h-fit py-0.5 px-2">
