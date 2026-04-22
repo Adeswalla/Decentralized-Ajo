@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTransactionSubmit } from '@/hooks/use-transaction-submit';
 import { useWallet } from '@/lib/wallet-context';
@@ -14,6 +14,7 @@ interface ContributeButtonProps {
 export function ContributeButton({ circleId, amount, onSuccess }: ContributeButtonProps) {
   const { isConnected } = useWallet();
   const [isBuilding, setIsBuilding] = useState(false);
+  const contributeInFlightRef = useRef(false);
 
   const { submitTransaction, isSubmitting, status } = useTransactionSubmit({
     onSuccess: async (hash) => {
@@ -52,6 +53,9 @@ export function ContributeButton({ circleId, amount, onSuccess }: ContributeButt
       return;
     }
 
+    if (contributeInFlightRef.current) return;
+    contributeInFlightRef.current = true;
+
     try {
       setIsBuilding(true);
 
@@ -78,6 +82,8 @@ export function ContributeButton({ circleId, amount, onSuccess }: ContributeButt
     } catch (err) {
       setIsBuilding(false);
       console.error('Contribution error:', err);
+    } finally {
+      contributeInFlightRef.current = false;
     }
   };
 
@@ -86,7 +92,7 @@ export function ContributeButton({ circleId, amount, onSuccess }: ContributeButt
   return (
     <Button
       onClick={handleContribute}
-      disabled={!isConnected}
+      disabled={!isConnected || isLoading}
       isLoading={isLoading}
       className="w-full"
     >

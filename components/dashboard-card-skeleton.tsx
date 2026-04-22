@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export const DashboardCardSkeleton: React.FC = () => {
   return (
-    <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500 overflow-hidden group">
+    <Card className="group overflow-hidden border-l-4 border-l-primary/50 transition-all duration-300 hover:shadow-lg">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <Skeleton className="h-6 w-32" />

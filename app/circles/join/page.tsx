@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Users, TrendingUp, Calendar, Loader2 } from 'lucide-react';
@@ -35,6 +35,7 @@ function JoinCircleContent() {
   const [previewing, setPreviewing] = useState(false);
   const [joining, setJoining] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const joinRequestInFlightRef = useRef(false);
 
   // Auto-preview when ?id= is present in URL
   useEffect(() => {
@@ -87,7 +88,9 @@ function JoinCircleContent() {
   };
 
   const handleJoin = async () => {
-    if (!preview) return;
+    if (!preview || joinRequestInFlightRef.current) return;
+
+    joinRequestInFlightRef.current = true;
     setJoining(true);
 
     try {
@@ -117,6 +120,7 @@ function JoinCircleContent() {
     } catch {
       toast.error('An error occurred. Please try again.');
     } finally {
+      joinRequestInFlightRef.current = false;
       setJoining(false);
     }
   };
@@ -243,7 +247,7 @@ function JoinCircleContent() {
                   This circle is not accepting new members.
                 </p>
               ) : (
-                <Button className="w-full" onClick={handleJoin} isLoading={joining}>
+                <Button className="w-full" onClick={handleJoin} disabled={joining} isLoading={joining}>
                   Confirm Join
                 </Button>
               )}
