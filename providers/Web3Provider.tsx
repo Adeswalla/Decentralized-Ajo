@@ -1,6 +1,6 @@
 'use client'
 
-import '@rainbow-me/rainbowkit/styles.css'
+// import '@rainbow-me/rainbowkit/styles.css'
 
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -13,15 +13,19 @@ import { metaMask, walletConnect } from 'wagmi/connectors'
 export function createWagmiConfig() {
   const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 
-  if (!projectId) {
-    throw new Error(
-      'NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not set. Add it to your .env.local file.'
+  const connectors = [metaMask()]
+
+  if (projectId && projectId !== 'placeholder_for_local_dev') {
+    connectors.push(walletConnect({ projectId }))
+  } else {
+    console.warn(
+      'NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not set or is a placeholder. WalletConnect will be disabled. Add a valid project ID to your .env file to enable it.'
     )
   }
 
   return createConfig({
     chains: [sepolia],
-    connectors: [metaMask(), walletConnect({ projectId })],
+    connectors,
     transports: {
       [sepolia.id]: http(),
     },

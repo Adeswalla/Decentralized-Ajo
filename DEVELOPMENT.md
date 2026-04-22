@@ -9,22 +9,7 @@ Guide for setting up and running Stellar Ajo in development mode.
 - PostgreSQL 12+ (for development database)
 - Stellar CLI (for smart contract testing)
 - Freighter wallet extension (for browser testing)
-
-## Quick Start
-
-### 1. Setup
-
-```bash
-# Clone the repository
-git clone <repo-url>
-cd stellar-ajo
-
-# Install dependencies
-pnpm install
-
-# Copy environment template
-cp .env.example .env.local
-
+w
 # Generate Prisma client
 pnpm prisma generate
 

@@ -17,6 +17,8 @@ import { Users, PlusCircle, Wallet, TrendingUp, CircleDot, ArrowRight, Search, X
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { CircleList } from '@/components/dashboard/circle-list';
 import { authenticatedFetch } from '@/lib/auth-client';
 import { formatAmount } from '@/lib/utils';
@@ -378,24 +380,7 @@ function LandingPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CircleDot className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-foreground">Stellar Ajo</span>
-          </div>
-          <div className="flex gap-4 items-center">
-            <ThemeToggle />
-            <Button variant="outline" onClick={() => router.push('/auth/login')}>
-              Sign In
-            </Button>
-            <Button onClick={() => router.push('/auth/register')}>
-              Get Started
-            </Button>
-          </div>
-        </div>
-      </header>
+
 
       {/* Hero Section */}
       <section className="py-20 px-4">

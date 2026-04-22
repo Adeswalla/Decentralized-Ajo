@@ -7,6 +7,7 @@ import { WalletProvider } from '@/lib/wallet-context'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Web3Provider } from '@/providers/Web3Provider'
 import { Navbar } from '@/components/layout/navbar'
+// @ts-ignore: Allow side-effect global CSS import without type declarations
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
