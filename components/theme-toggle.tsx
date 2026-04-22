@@ -16,7 +16,7 @@ export function ThemeToggle() {
     <Button
       variant="outline"
       size="sm"
-      className="flex items-center gap-2 font-medium"
+      className="flex items-center gap-2 font-medium min-h-[44px] sm:min-h-0"
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       aria-label="Toggle theme"
     >

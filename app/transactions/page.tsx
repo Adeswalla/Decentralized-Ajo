@@ -67,8 +67,8 @@ export default function TransactionsPage() {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" onClick={() => router.back()}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Transaction History</h1>
@@ -94,14 +94,14 @@ export default function TransactionsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
               <p className="text-sm text-muted-foreground">
                 Page {page} of {totalPages}
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="flex-1 sm:flex-none min-h-[44px]"
                   disabled={page === 1}
                   onClick={() => setPage((p) => p - 1)}
                 >
@@ -109,7 +109,7 @@ export default function TransactionsPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="flex-1 sm:flex-none min-h-[44px]"
                   disabled={page === totalPages}
                   onClick={() => setPage((p) => p + 1)}
                 >

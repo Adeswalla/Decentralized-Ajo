@@ -98,7 +98,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
       <DialogTrigger asChild>
-        <Button>
+        <Button className="min-h-[44px] sm:min-h-0">
           <Plus className="h-4 w-4 mr-2" />
           New Proposal
         </Button>
@@ -128,7 +128,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter proposal title..."
               maxLength={100}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full px-3 py-2 min-h-[44px] border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -154,7 +154,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
               id="proposal-type"
               value={proposalType}
               onChange={(e) => setProposalType(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full px-3 py-2 min-h-[44px] border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {PROPOSAL_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -173,7 +173,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
               value={votingEndDate}
               onChange={(e) => setVotingEndDate(e.target.value)}
               min={minDateStr}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full px-3 py-2 min-h-[44px] border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -188,7 +188,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
                 max={100}
                 value={requiredQuorum}
                 onChange={(e) => setRequiredQuorum(parseInt(e.target.value))}
-                className="flex-1 accent-primary"
+                className="flex-1 accent-primary min-h-[44px]"
               />
               <span className="text-sm font-medium w-12 text-right">{requiredQuorum}%</span>
             </div>
@@ -200,10 +200,11 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
               variant="outline"
               onClick={() => { setOpen(false); resetForm(); }}
               disabled={isSubmitting}
+              className="min-h-[44px] sm:min-h-0"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} className="min-h-[44px] sm:min-h-0">
               {isSubmitting ? 'Creating...' : 'Create Proposal'}
             </Button>
           </DialogFooter>

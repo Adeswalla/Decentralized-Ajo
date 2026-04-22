@@ -154,7 +154,7 @@ export default function GovernancePage() {
         <div className="container mx-auto px-4 py-6">
           <Link
             href={`/circles/${circleId}`}
-            className="flex items-center text-primary hover:underline mb-4"
+            className="inline-flex items-center text-primary hover:underline mb-4 min-h-[44px] -ml-2 px-2 w-fit"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Circle
@@ -185,9 +185,8 @@ export default function GovernancePage() {
             <Button
               key={filter.value}
               variant={statusFilter === filter.value ? 'default' : 'outline'}
-              size="sm"
               onClick={() => setStatusFilter(filter.value)}
-              className="text-xs"
+              className="text-xs min-h-[44px]"
             >
               {filter.label}
               {filter.value !== 'ALL' && (
