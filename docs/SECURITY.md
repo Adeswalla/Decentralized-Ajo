@@ -86,6 +86,11 @@ The organizer can call `panic()` to immediately freeze all operations. This is a
 ### Penalty Enforcement
 Partial withdrawals enforce a 10% penalty at the contract level — it cannot be bypassed by calling the API directly.
 
+### Static Analysis / Formal Methods Evaluation (Issue #350)
+- Decision record: `contracts/ajo-circle/adr/0001-static-analysis-formal-methods-evaluation.md`
+- Security review tracker: GitHub issue #342 (`[Contracts] External security review prep`)
+- Current decision: adopt `cargo clippy` as an automated baseline check now; defer Kani/MIRAI rollout until toolchain support for Soroban targets is more mature.
+
 ## Known Limitations and Risks
 
 | Risk | Severity | Notes |
