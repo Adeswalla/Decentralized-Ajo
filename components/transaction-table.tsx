@@ -39,8 +39,8 @@ export function TransactionTable({ transactions, onSort, sortBy, order }: Transa
   return (
     <div className="w-full">
       {/* Desktop View */}
-      <div className="hidden md:table w-full rounded-md border">
-        <Table>
+      <div className="hidden md:block w-full overflow-x-auto rounded-md border">
+        <Table className="min-w-[600px]">
           <TableHeader>
             <TableRow>
               <TableHead>
@@ -224,8 +224,7 @@ export function TransactionCard({ transaction }: { transaction: Transaction }) {
 
       <Button
         variant="ghost"
-        size="sm"
-        className="w-full text-muted-foreground hover:text-foreground h-8 flex items-center justify-center gap-1 group transition-colors"
+        className="w-full text-muted-foreground hover:text-foreground min-h-[44px] flex items-center justify-center gap-1 group transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {isExpanded ? (

@@ -217,26 +217,25 @@ export function ProposalCard({ proposal, onVote, isWalletConnected }: ProposalCa
           <RadioGroup
             value={selectedVote}
             onValueChange={setSelectedVote}
-            className="flex gap-4 w-full justify-center"
+            className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full justify-center"
           >
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="YES" id={`yes-${proposal.id}`} />
-              <Label htmlFor={`yes-${proposal.id}`} className="text-sm cursor-pointer">Yes</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="YES" id={`yes-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`yes-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">Yes</Label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="NO" id={`no-${proposal.id}`} />
-              <Label htmlFor={`no-${proposal.id}`} className="text-sm cursor-pointer">No</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="NO" id={`no-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`no-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">No</Label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="ABSTAIN" id={`abstain-${proposal.id}`} />
-              <Label htmlFor={`abstain-${proposal.id}`} className="text-sm cursor-pointer">Abstain</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="ABSTAIN" id={`abstain-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`abstain-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">Abstain</Label>
             </div>
           </RadioGroup>
           <Button
             onClick={handleSubmitVote}
             disabled={!selectedVote || isSubmitting}
-            className="w-full"
-            size="sm"
+            className="w-full min-h-[44px] sm:min-h-0"
           >
             {isSubmitting ? (
               'Submitting...'
