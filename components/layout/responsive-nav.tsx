@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/sheet";
 import { WalletButton } from "@/components/wallet-button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { NotificationBell } from "@/components/notifications/notification-bell";
 import { navLinks } from "./sidebar";
 
 interface ResponsiveNavProps {
@@ -270,7 +269,7 @@ export function ResponsiveNav({ user, notifications = 0 }: ResponsiveNavProps) {
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600 focus:text-red-600">
+                <DropdownMenuItem className="text-destructive focus:text-destructive">
                   <LogOut className="h-4 w-4 mr-2" />
                   Log out
                 </DropdownMenuItem>
