@@ -909,10 +909,19 @@ impl AjoCircle {
     }
 
     /// Get current fee configuration
-    pub fn get_fee_config(env: Env) -> Option<FeeConfig> {
+pub fn get_fee_config(env: Env) -> Option<FeeConfig> {
         env.storage().instance().get(&DataKey::FeeConfig)
     }
 }
+
+/// CAPABILITY_MATRIX_COVERAGE: See README.md matrix and src/auth_tests.rs
+/// All privileged fns have negative tests. New ones must add row + test.
+#[cfg(test)]
+mod auth_tests;
+
+#[cfg(test)]
+mod error_tests;
+
 Â  Â  /// Calculate 10^exp with overflow checking
 Â  Â  ///
 Â  Â  /// # Arguments
