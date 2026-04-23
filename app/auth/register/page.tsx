@@ -163,9 +163,10 @@ export default function RegisterPage() {
                   placeholder="john@example.com"
                   value={formData.email}
                   onChange={handleChange}
-                  className={errors.email ? 'border-destructive' : ''}
+                  aria-invalid={!!errors.email}
+                  aria-describedby={errors.email ? 'email-error' : undefined}
                 />
-                {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                {errors.email && <p id="email-error" role="alert" className="text-sm text-destructive">{errors.email}</p>}
               </div>
 
               <div className="space-y-2">
@@ -177,9 +178,10 @@ export default function RegisterPage() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
-                  className={errors.password ? 'border-destructive' : ''}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? 'password-error' : undefined}
                 />
-                {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                {errors.password && <p id="password-error" role="alert" className="text-sm text-destructive">{errors.password}</p>}
               </div>
 
               <div className="space-y-2">
@@ -191,9 +193,10 @@ export default function RegisterPage() {
                   placeholder="••••••••"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className={errors.confirmPassword ? 'border-destructive' : ''}
+                  aria-invalid={!!errors.confirmPassword}
+                  aria-describedby={errors.confirmPassword ? 'confirmPassword-error' : undefined}
                 />
-                {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                {errors.confirmPassword && <p id="confirmPassword-error" role="alert" className="text-sm text-destructive">{errors.confirmPassword}</p>}
               </div>
 
               <Button type="submit" className="w-full" isLoading={loading}>

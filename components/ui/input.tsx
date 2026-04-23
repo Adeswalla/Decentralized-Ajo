@@ -2,6 +2,31 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
+/**
+ * A styled input component that forwards all props — including ARIA attributes —
+ * to the underlying `<input>` element via the `...props` spread.
+ *
+ * ARIA usage contract:
+ * - `aria-invalid`: Set to `true` when the field has a validation error. Triggers
+ *   the destructive ring/border CSS variant defined on this component.
+ * - `aria-describedby`: Set to the `id` of the associated error message element so
+ *   screen readers announce the error when the field is focused.
+ * - `aria-label`: Provide when the field has no visible `<label>` element.
+ *
+ * @example
+ * ```tsx
+ * <Input
+ *   id="email"
+ *   aria-invalid={!!errors.email}
+ *   aria-describedby={errors.email ? "email-error" : undefined}
+ * />
+ * {errors.email && (
+ *   <p id="email-error" role="alert" className="text-sm text-destructive">
+ *     {errors.email}
+ *   </p>
+ * )}
+ * ```
+ */
 function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
   return (
     <input

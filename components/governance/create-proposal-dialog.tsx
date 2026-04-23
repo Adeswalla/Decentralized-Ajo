@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import {
@@ -11,6 +11,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
 
@@ -40,7 +42,7 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
   const [proposalType, setProposalType] = useState('RULE_CHANGE');
   const [votingEndDate, setVotingEndDate] = useState('');
   const [requiredQuorum, setRequiredQuorum] = useState(50);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const resetForm = () => {
     setTitle('');
@@ -48,30 +50,31 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
     setProposalType('RULE_CHANGE');
     setVotingEndDate('');
     setRequiredQuorum(50);
-    setError('');
+    setErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    const newErrors: Record<string, string> = {};
 
     if (!title.trim() || title.length < 3) {
-      setError('Title must be at least 3 characters');
-      return;
+      newErrors.title = 'Title must be at least 3 characters';
     }
     if (!description.trim() || description.length < 10) {
-      setError('Description must be at least 10 characters');
-      return;
+      newErrors.description = 'Description must be at least 10 characters';
     }
     if (!votingEndDate) {
-      setError('Please set a voting end date');
-      return;
+      newErrors.votingEndDate = 'Please set a voting end date';
+    } else if (new Date(votingEndDate) <= new Date()) {
+      newErrors.votingEndDate = 'Voting end date must be in the future';
     }
-    if (new Date(votingEndDate) <= new Date()) {
-      setError('Voting end date must be in the future');
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
+    setErrors({});
     setIsSubmitting(true);
     try {
       await onSubmit({
@@ -84,13 +87,12 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
       resetForm();
       setOpen(false);
     } catch {
-      setError('Failed to create proposal. Please try again.');
+      setErrors({ form: 'Failed to create proposal. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Minimum date is tomorrow
   const minDate = new Date();
   minDate.setDate(minDate.getDate() + 1);
   const minDateStr = minDate.toISOString().split('T')[0];
@@ -112,38 +114,50 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
+          {errors.form && (
             <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-              {error}
+              {errors.form}
             </div>
           )}
 
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="proposal-title">Title</Label>
-            <input
+            <Input
               id="proposal-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter proposal title..."
               maxLength={100}
-              className="w-full px-3 py-2 min-h-[44px] border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-invalid={!!errors.title}
+              aria-describedby={errors.title ? 'proposal-title-error' : undefined}
             />
+            {errors.title && (
+              <p id="proposal-title-error" role="alert" className="text-sm text-destructive">
+                {errors.title}
+              </p>
+            )}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="proposal-description">Description</Label>
-            <textarea
+            <Textarea
               id="proposal-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the proposal in detail..."
               rows={4}
               maxLength={2000}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-invalid={!!errors.description}
+              aria-describedby={errors.description ? 'proposal-description-error' : undefined}
             />
+            {errors.description && (
+              <p id="proposal-description-error" role="alert" className="text-sm text-destructive">
+                {errors.description}
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground text-right">{description.length}/2000</p>
           </div>
 
@@ -173,8 +187,15 @@ export function CreateProposalDialog({ onSubmit }: CreateProposalDialogProps) {
               value={votingEndDate}
               onChange={(e) => setVotingEndDate(e.target.value)}
               min={minDateStr}
+              aria-invalid={!!errors.votingEndDate}
+              aria-describedby={errors.votingEndDate ? 'voting-end-date-error' : undefined}
               className="w-full px-3 py-2 min-h-[44px] border border-border rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            {errors.votingEndDate && (
+              <p id="voting-end-date-error" role="alert" className="text-sm text-destructive">
+                {errors.votingEndDate}
+              </p>
+            )}
           </div>
 
           {/* Required Quorum */}

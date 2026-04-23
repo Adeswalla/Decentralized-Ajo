@@ -122,6 +122,7 @@
     "@types/react-dom": "19.2.3",
     "concurrently": "^9.1.2",
     "dotenv": "^17.3.1",
+    "fast-check": "^4.7.0",
     "hardhat": "^3.2.0",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.3.0",

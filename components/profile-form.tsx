@@ -107,11 +107,12 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
             id="username"
             placeholder="savings-hero"
             {...register('username')}
-            className={errors.username ? 'border-destructive' : ''}
+            aria-invalid={!!errors.username}
+            aria-describedby={errors.username ? 'username-error' : undefined}
             autoComplete="nickname"
           />
           {errors.username && (
-            <p className="text-sm text-destructive">{errors.username.message}</p>
+            <p id="username-error" role="alert" className="text-sm text-destructive">{errors.username.message}</p>
           )}
           <p className="text-xs text-muted-foreground">Letters, numbers, underscores, and hyphens. Optional.</p>
         </div>
@@ -123,11 +124,12 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
             type="email"
             placeholder="alerts@example.com"
             {...register('notificationEmail')}
-            className={errors.notificationEmail ? 'border-destructive' : ''}
+            aria-invalid={!!errors.notificationEmail}
+            aria-describedby={errors.notificationEmail ? 'notificationEmail-error' : undefined}
             autoComplete="email"
           />
           {errors.notificationEmail && (
-            <p className="text-sm text-destructive">{errors.notificationEmail.message}</p>
+            <p id="notificationEmail-error" role="alert" className="text-sm text-destructive">{errors.notificationEmail.message}</p>
           )}
           <p className="text-xs text-muted-foreground">Optional. Can differ from your login email.</p>
         </div>
@@ -138,10 +140,11 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
             id="firstName"
             placeholder="John"
             {...register('firstName')}
-            className={errors.firstName ? 'border-destructive' : ''}
+            aria-invalid={!!errors.firstName}
+            aria-describedby={errors.firstName ? 'firstName-error' : undefined}
           />
           {errors.firstName && (
-            <p className="text-sm text-destructive">{errors.firstName.message}</p>
+            <p id="firstName-error" role="alert" className="text-sm text-destructive">{errors.firstName.message}</p>
           )}
         </div>
 
@@ -151,10 +154,11 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
             id="lastName"
             placeholder="Doe"
             {...register('lastName')}
-            className={errors.lastName ? 'border-destructive' : ''}
+            aria-invalid={!!errors.lastName}
+            aria-describedby={errors.lastName ? 'lastName-error' : undefined}
           />
           {errors.lastName && (
-            <p className="text-sm text-destructive">{errors.lastName.message}</p>
+            <p id="lastName-error" role="alert" className="text-sm text-destructive">{errors.lastName.message}</p>
           )}
         </div>
       </div>
@@ -181,10 +185,11 @@ export function ProfileForm({ initialData, onSuccess }: ProfileFormProps) {
           placeholder="Tell your circle members a bit about yourself..."
           rows={3}
           {...register('bio')}
-          className={errors.bio ? 'border-destructive' : ''}
+          aria-invalid={!!errors.bio}
+          aria-describedby={errors.bio ? 'bio-error' : undefined}
         />
         {errors.bio && (
-          <p className="text-sm text-destructive">{errors.bio.message}</p>
+          <p id="bio-error" role="alert" className="text-sm text-destructive">{errors.bio.message}</p>
         )}
       </div>
 
