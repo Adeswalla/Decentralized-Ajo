@@ -390,6 +390,27 @@ The factory:
 - `MAX_MEMBERS`: 50 (default capacity)
 - `HARD_CAP`: 100 (absolute maximum)
 
+## Capability Matrix (Organizer vs Member)
+
+| Function | Organizer/Deployer | Admin (ADMIN_ROLE) | Member | Any |
+|----------|---------------------|---------------------|--------|-----|
+| initialize_circle | ✅ organizer.require_auth() | N/A (init only) | ❌ Unauthorized | ❌ |
+| join_circle/add_member | ✅ organizer.require_auth() + organizer match | ❌ Unauthorized | ❌ Unauthorized | ❌ |
+| deposit/contribute | ✅ (as member) | ✅ (as member) | ✅ require_auth() + active | ❌ NotFound |
+| claim_payout/withdraw | ✅ (as member + rotation) | ✅ (as member + rotation) | ✅ require_auth() + rotation/not paid | ❌ Unauthorized/NotFound |
+| panic/resume/emergency_stop/resume_operations | ✅ require_admin() | ✅ require_admin() | ❌ Unauthorized | ❌ |
+| emergency_panic | ✅ require_deployer() | ❌ Unauthorized | ❌ Unauthorized | ❌ |
+| set_kyc_status | ✅ require_admin() | ✅ require_admin() | ❌ Unauthorized | ❌ |
+| boot_dormant_member | ✅ require_admin() | ✅ require_admin() | ❌ Unauthorized | ❌ |
+| slash_member | ✅ require_admin() | ✅ require_admin() | ❌ Unauthorized | ❌ |
+| shuffle_rotation | ✅ organizer.require_auth() + match | ❌ Unauthorized | ❌ Unauthorized | ❌ |
+| grant_role/revoke_role | ✅ require_deployer() | ❌ Unauthorized | ❌ Unauthorized | ❌ |
+| upgrade | ✅ require_admin() | ✅ require_admin() | ❌ Unauthorized | ❌ |
+| create_ajo (factory) | ✅ organizer.require_auth() | N/A | N/A | ❌ |
+
+**Coverage**: 100% privileged entrypoints. New functions require matrix row + negative test.
+
 ## License
 
 This contract is part of the Decentralized Ajo project.
+
