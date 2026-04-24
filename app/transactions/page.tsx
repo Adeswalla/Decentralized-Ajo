@@ -17,8 +17,19 @@ export default function TransactionsPage() {
   const [sortBy, setSortBy] = useState<'createdAt' | 'amount'>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Filter states
+  const [circleId, setCircleId] = useState('');
+  const [type, setType] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  // Cursor states
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+
   const fetchTransactions = useCallback(
-    async (p: number, sb: string, o: string) => {
+    async (p: number, sb: string, o: string, cId: string, t: string, fDate: string, tDate: string, cur: string | null) => {
       const token = localStorage.getItem('token');
       if (!token) {
         router.push('/auth/login');
@@ -27,9 +38,15 @@ export default function TransactionsPage() {
 
       setLoading(true);
       try {
-        const res = await authenticatedFetch(
-          `/api/transactions?page=${p}&sortBy=${sb}&order=${o}`
-        );
+        let url = `/api/transactions?limit=20&sortBy=${sb}&order=${o}`;
+        if (cur) url += `&cursor=${cur}`;
+        else url += `&page=${p}`;
+        if (cId) url += `&circleId=${cId}`;
+        if (t) url += `&type=${t}`;
+        if (fDate) url += `&from=${fDate}`;
+        if (tDate) url += `&to=${tDate}`;
+
+        const res = await authenticatedFetch(url);
         if (res.status === 401) {
           router.push('/auth/login');
           return;
@@ -38,6 +55,7 @@ export default function TransactionsPage() {
         const data = await res.json();
         setTransactions(data.contributions);
         setTotal(data.total);
+        setNextCursor(data.nextCursor || null);
       } catch {
         // silent — keep previous data on transient errors
       } finally {
@@ -48,8 +66,8 @@ export default function TransactionsPage() {
   );
 
   useEffect(() => {
-    fetchTransactions(page, sortBy, order);
-  }, [page, sortBy, order, fetchTransactions]);
+    fetchTransactions(page, sortBy, order, circleId, type, from, to, currentCursor);
+  }, [page, sortBy, order, circleId, type, from, to, currentCursor, fetchTransactions]);
 
   const toggleSort = (col: 'createdAt' | 'amount') => {
     if (sortBy === col) {
@@ -59,6 +77,28 @@ export default function TransactionsPage() {
       setOrder('desc');
     }
     setPage(1);
+    setCurrentCursor(null);
+    setCursorHistory([]);
+  };
+
+  const handleNextPage = () => {
+    if (nextCursor) {
+      setCursorHistory((prev) => [...prev, currentCursor || '']);
+      setCurrentCursor(nextCursor);
+      setPage((p) => p + 1);
+    } else {
+      setPage((p) => p + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (cursorHistory.length > 0) {
+      const newHistory = [...cursorHistory];
+      const prevCursor = newHistory.pop() || null;
+      setCursorHistory(newHistory);
+      setCurrentCursor(prevCursor === '' ? null : prevCursor);
+    }
+    setPage((p) => Math.max(1, p - 1));
   };
 
   const totalPages = Math.ceil(total / 20);
@@ -74,6 +114,42 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold">Transaction History</h1>
           <p className="text-sm text-muted-foreground">{total} total transactions</p>
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+        <input 
+          type="text" 
+          placeholder="Filter by Circle ID" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          value={circleId}
+          onChange={(e) => { setCircleId(e.target.value); setPage(1); setCurrentCursor(null); setCursorHistory([]); }}
+        />
+        <select 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          value={type}
+          onChange={(e) => { setType(e.target.value); setPage(1); setCurrentCursor(null); setCursorHistory([]); }}
+        >
+          <option value="">All Statuses</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="PENDING">Pending</option>
+          <option value="FAILED">Failed</option>
+          <option value="REFUNDED">Refunded</option>
+        </select>
+        <input 
+          type="date" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground"
+          value={from}
+          onChange={(e) => { setFrom(e.target.value); setPage(1); setCurrentCursor(null); setCursorHistory([]); }}
+          title="From Date"
+        />
+        <input 
+          type="date" 
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground"
+          value={to}
+          onChange={(e) => { setTo(e.target.value); setPage(1); setCurrentCursor(null); setCursorHistory([]); }}
+          title="To Date"
+        />
       </div>
 
       {/* Body */}
@@ -139,15 +215,15 @@ export default function TransactionsPage() {
                   variant="outline"
                   className="flex-1 sm:flex-none min-h-[44px]"
                   disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
+                  onClick={handlePrevPage}
                 >
                   Previous
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-1 sm:flex-none min-h-[44px]"
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page === totalPages && !nextCursor}
+                  onClick={handleNextPage}
                 >
                   Next
                 </Button>

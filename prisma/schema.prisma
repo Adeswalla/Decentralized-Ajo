@@ -185,6 +185,7 @@ model Contribution {
 
   @@index([circleId])
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([status])
   @@index([circleId, status])
   @@index([userId, status])

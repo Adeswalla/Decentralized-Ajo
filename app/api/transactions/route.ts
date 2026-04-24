@@ -17,21 +17,54 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sortBy = searchParams.get('sortBy') || 'createdAt';
   const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc';
+  
+  // Pagination parameters
+  const cursor = searchParams.get('cursor');
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-  const limit = 20;
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
 
-  const orderBy = sortBy === 'amount' ? { amount: order } : { createdAt: order };
+  // Filter parameters
+  const circleId = searchParams.get('circleId');
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const type = searchParams.get('type');
+
+  const where: any = { userId: payload.userId };
+  if (circleId) where.circleId = circleId;
+  if (type) where.status = type;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from);
+    if (to) where.createdAt.lte = new Date(to);
+  }
+
+  // Stable sort: primary sort + tiebreaker
+  const orderBy: any[] = [
+    sortBy === 'amount' ? { amount: order } : { createdAt: order },
+    { id: order }
+  ];
+
+  const findManyOptions: any = {
+    where,
+    include: { circle: { select: { id: true, name: true } } },
+    orderBy,
+    take: limit,
+  };
+
+  if (cursor) {
+    findManyOptions.cursor = { id: cursor };
+    findManyOptions.skip = 1; // Skip the cursor itself
+  } else if (page > 1) {
+    // Fallback to offset pagination if no cursor is provided but page > 1
+    findManyOptions.skip = (page - 1) * limit;
+  }
 
   const [contributions, total] = await Promise.all([
-    prisma.contribution.findMany({
-      where: { userId: payload.userId },
-      include: { circle: { select: { id: true, name: true } } },
-      orderBy,
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.contribution.count({ where: { userId: payload.userId } }),
+    prisma.contribution.findMany(findManyOptions),
+    prisma.contribution.count({ where }),
   ]);
 
-  return NextResponse.json({ contributions, total, page, limit });
+  const nextCursor = contributions.length === limit ? contributions[contributions.length - 1].id : null;
+
+  return NextResponse.json({ contributions, total, page, limit, nextCursor });
 }

@@ -1238,3 +1238,92 @@ fn test_full_happy_path_three_members_contribute_and_payout() {
     assert_eq!(org_data.total_withdrawn, 0);
     assert_eq!(org_data.has_received_payout, false);
 }
+
+// ─── Time-Bound Integration Scenarios ─────────────────────────────────────────
+
+/// Validate that a missed payment allows the admin to slash the member.
+/// Since the contract does not currently block late deposits automatically,
+/// this validates the manual admin intervention policy.
+#[test]
+fn test_integration_late_payment_admin_slashes() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    // Initial state: Ledger time is 1_000_000
+    let mut info = base_ledger();
+    info.timestamp = 1_000_000;
+    env.ledger().set(info);
+
+    // Fast-forward time by 10 days (frequency_days is 7)
+    info.timestamp = 1_000_000 + 10 * 86_400;
+    env.ledger().set(info.clone());
+
+    // Admin notices the deadline passed without user_a depositing, applies slash.
+    client.slash_member(&organizer, &user_a).unwrap();
+
+    // The user can still deposit after being slashed once
+    info.timestamp += 86_400; // 1 day later
+    env.ledger().set(info);
+    assert_eq!(client.deposit(&user_a), Ok(()));
+}
+
+/// Validate round rollover mechanics. The round ONLY advances when ALL members 
+/// hit the required contribution threshold for the current round, regardless of time.
+#[test]
+fn test_integration_round_rollover_on_full_contribution() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup_with_members(&env);
+
+    assert_eq!(client.get_circle_state().unwrap().current_round, 1);
+
+    // 2 out of 3 members deposit
+    client.deposit(&organizer).unwrap();
+    client.deposit(&user_a).unwrap();
+
+    // Round should still be 1
+    assert_eq!(client.get_circle_state().unwrap().current_round, 1);
+
+    // Fast-forward time
+    let mut info = base_ledger();
+    info.timestamp = 1_000_000 + 5 * 86_400;
+    env.ledger().set(info);
+
+    // Final member deposits
+    client.deposit(&user_b).unwrap();
+
+    // Now round should advance to 2
+    assert_eq!(client.get_circle_state().unwrap().current_round, 2);
+}
+
+/// Validate that double actions (depositing twice) before the round boundary 
+/// correctly registers as an early payment for the next round, without prematurely advancing the round.
+#[test]
+fn test_integration_round_boundary_double_actions() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, user_b) = setup_with_members(&env);
+
+    // Organizer deposits twice
+    client.deposit(&organizer).unwrap(); // Completes round 1 for organizer
+    client.deposit(&organizer).unwrap(); // Pre-pays for round 2
+
+    // Round is still 1 because user_a and user_b haven't paid
+    assert_eq!(client.get_circle_state().unwrap().current_round, 1);
+
+    // User A and B pay for round 1
+    client.deposit(&user_a).unwrap();
+    client.deposit(&user_b).unwrap();
+
+    // NOW round advances to 2, and organizer is already covered for round 2
+    assert_eq!(client.get_circle_state().unwrap().current_round, 2);
+
+    // Organizer's total contributed should be 200
+    let org_balance = client.get_member_balance(&organizer).unwrap();
+    assert_eq!(org_balance.total_contributed, 200);
+}
+

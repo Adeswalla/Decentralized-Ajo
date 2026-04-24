@@ -738,6 +738,24 @@ paths:
         - name: page
           in: query
           schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: circleId
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: type
+          in: query
+          schema: { type: string }
       responses:
         '200':
           description: Transactions fetched
@@ -967,6 +985,15 @@ components:
           type: array
           items:
             type: object
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        nextCursor:
+          type: string
+          nullable: true
 
     UserAjoListResponse:
       type: object
