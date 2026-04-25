@@ -12,6 +12,9 @@ mod deposit_tests;
 mod withdrawal_tests;
 
 #[cfg(test)]
+mod penalty_tests;
+
+#[cfg(test)]
 mod test;
 
 use soroban_sdk::{
