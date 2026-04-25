@@ -5,6 +5,7 @@ import { validateBody, applyRateLimit } from '@/lib/api-helpers';
 import { ContributeSchema } from '@/lib/validations/circle';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { sendContributionReminder, sendPayoutAlert } from '@/lib/email';
+import { invalidatePrefix } from '@/lib/cache';
 
 export async function POST(
   request: NextRequest,
@@ -80,6 +81,9 @@ export async function POST(
         sendPayoutAlert(payoutMember.user.email, payoutMember.user.firstName, payoutAmount);
       }
     }
+
+    // Bust detail cache so contribution totals are fresh
+    invalidatePrefix(`circles:detail:${id}`);
 
     return NextResponse.json({ success: true, contribution }, { status: 201 });
   } catch (err) {

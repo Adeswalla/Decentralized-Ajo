@@ -5,6 +5,7 @@ import { validateBody, applyRateLimit } from '@/lib/api-helpers';
 import { UpdateCircleSchema } from '@/lib/validations/circle';
 import type { UpdateCircleInput } from '@/lib/validations/circle';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { cacheGet, cacheSet, cacheDel, invalidatePrefix } from '@/lib/cache';
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +22,12 @@ export async function GET(
 
   try {
     const { id } = await params;
+
+    const cacheKey = `circles:detail:${id}:${payload.userId}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { status: 200 });
+    }
 
     const circle = await prisma.circle.findUnique({
       where: { id },
@@ -52,7 +59,10 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    return NextResponse.json({ success: true, circle }, { status: 200 });
+    const responseBody = { success: true, circle };
+    cacheSet(cacheKey, responseBody);
+
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (err) {
     console.error('Get circle error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -98,6 +108,10 @@ export async function PUT(
         members: { include: { user: { select: { id: true, email: true } } } },
       },
     });
+
+    // Bust the detail cache for this circle (all users) and list caches for the organizer
+    invalidatePrefix(`circles:detail:${id}`);
+    invalidatePrefix(`circles:list:${payload.userId}`);
 
     return NextResponse.json({ success: true, circle: updatedCircle }, { status: 200 });
   } catch (err) {

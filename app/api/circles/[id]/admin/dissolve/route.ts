@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
 import { applyRateLimit } from '@/lib/api-helpers';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { invalidatePrefix } from '@/lib/cache';
 
 export async function POST(
   request: NextRequest,
@@ -52,6 +53,10 @@ export async function POST(
         leftAt: new Date(),
       },
     });
+
+    // Bust caches so dissolved status is immediately visible
+    invalidatePrefix(`circles:detail:${circleId}`);
+    invalidatePrefix(`circles:list:${payload.userId}`);
 
     return NextResponse.json(
       { success: true, message: 'Circle dissolved successfully' },

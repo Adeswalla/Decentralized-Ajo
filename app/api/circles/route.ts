@@ -5,6 +5,7 @@ import { CircleStatus } from '@prisma/client';
 import { applyRateLimit, validateBody } from '@/lib/api-helpers';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { CreateCircleSchema, CreateCircleInput } from '@/lib/validations/circle';
+import { cacheGet, cacheSet, invalidatePrefix } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   const token = extractToken(request.headers.get('authorization'));
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
     await prisma.circleMember.create({
       data: { circleId: circle.id, userId: payload.userId, rotationOrder: 1 },
     });
+
+    // Bust cached list results for this user so they see the new circle immediately
+    invalidatePrefix(`circles:list:${payload.userId}`);
 
     return NextResponse.json({ success: true, circle }, { status: 201 });
   } catch (err) {
@@ -80,6 +84,13 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
+    // Build a deterministic cache key scoped to this user + query params
+    const cacheKey = `circles:list:${payload.userId}:p${page}:l${limit}:s${statusParam ?? ''}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { status: 200 });
+    }
+
     // Base where clause — user's circles as member or organizer
     const where = {
       OR: [
@@ -116,17 +127,18 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json(
-      {
-        data: circles,
-        meta: {
-          total,
-          pages: Math.ceil(total / limit),
-          currentPage: page,
-        },
+    const responseBody = {
+      data: circles,
+      meta: {
+        total,
+        pages: Math.ceil(total / limit),
+        currentPage: page,
       },
-      { status: 200 }
-    );
+    };
+
+    cacheSet(cacheKey, responseBody);
+
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (error) {
     console.error('List circles error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
