@@ -1,0 +1,10 @@
+C:\Users\machintosh\Documents\new wave\Decentralized-Ajo\contracts\ajo-circle\target\debug\deps\wasmi_arena-baa14fbc90336487.d: C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\lib.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\component_vec.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\dedup.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\guarded.rs
+
+C:\Users\machintosh\Documents\new wave\Decentralized-Ajo\contracts\ajo-circle\target\debug\deps\libwasmi_arena-baa14fbc90336487.rlib: C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\lib.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\component_vec.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\dedup.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\guarded.rs
+
+C:\Users\machintosh\Documents\new wave\Decentralized-Ajo\contracts\ajo-circle\target\debug\deps\libwasmi_arena-baa14fbc90336487.rmeta: C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\lib.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\component_vec.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\dedup.rs C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\guarded.rs
+
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\lib.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\component_vec.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\dedup.rs:
+C:\Users\machintosh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wasmi_arena-0.4.1\src\guarded.rs:

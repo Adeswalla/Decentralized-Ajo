@@ -1,47 +1,51 @@
 /**
- * In-memory LRU cache with TTL support.
- *
- * Backed by `lru-cache`. For multi-instance deployments swap this out for a
- * Redis/Upstash adapter — the public API (`get`, `set`, `del`, `invalidatePrefix`)
- * is the same either way.
- *
- * Default TTL: 60 seconds
- * Max entries:  500
+ * Lightweight in-memory TTL cache for server-side use.
+ * For multi-instance deployments, replace with Redis/Upstash.
  */
 
-import { LRUCache } from 'lru-cache';
-
-const DEFAULT_TTL_MS = 60_000; // 60 s
-const MAX_ITEMS = 500;
-
-const store = new LRUCache<string, unknown>({
-  max: MAX_ITEMS,
-  ttl: DEFAULT_TTL_MS,
-  // Allow stale reads while a fresh value is being fetched (optional, safe default)
-  allowStale: false,
-});
-
-/** Retrieve a cached value, or `undefined` on miss / expiry. */
-export function cacheGet<T>(key: string): T | undefined {
-  return store.get(key) as T | undefined;
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
 }
 
-/** Store a value. `ttlMs` overrides the default 60 s TTL. */
-export function cacheSet<T>(key: string, value: T, ttlMs = DEFAULT_TTL_MS): void {
-  store.set(key, value, { ttl: ttlMs });
+const store = new Map<string, CacheEntry<unknown>>();
+
+export function cacheGet<T>(key: string): T | null {
+  const entry = store.get(key) as CacheEntry<T> | undefined;
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    store.delete(key);
+    return null;
+  }
+  return entry.value;
 }
 
-/** Remove a single entry. */
-export function cacheDel(key: string): void {
+export function cacheSet<T>(key: string, value: T, ttlMs: number): void {
+  store.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+export function cacheDelete(key: string): void {
   store.delete(key);
 }
 
-/**
- * Invalidate all keys that start with `prefix`.
- * Useful for busting a whole resource group (e.g. `"circles:"`) after a write.
- */
-export function invalidatePrefix(prefix: string): void {
+/** Invalidate all keys that start with a given prefix */
+export function cacheInvalidatePrefix(prefix: string): void {
   for (const key of store.keys()) {
     if (key.startsWith(prefix)) store.delete(key);
   }
+}
+
+/**
+ * Cache-aside helper: returns cached value or calls loader, caches result.
+ */
+export async function withCache<T>(
+  key: string,
+  ttlMs: number,
+  loader: () => Promise<T>,
+): Promise<T> {
+  const cached = cacheGet<T>(key);
+  if (cached !== null) return cached;
+  const value = await loader();
+  cacheSet(key, value, ttlMs);
+  return value;
 }

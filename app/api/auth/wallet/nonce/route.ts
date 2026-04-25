@@ -1,48 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { extractToken, verifyToken } from '@/lib/auth';
+import { createChildLogger } from '@/lib/logger';
 
-export async function GET(request: NextRequest) {
+const NONCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const logger = createChildLogger({ service: 'api', route: '/api/auth/wallet/nonce' });
+
+export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate the user
-    const authHeader = request.headers.get('Authorization');
-    const token = extractToken(authHeader);
+    const { address } = await request.json();
 
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized: No token provided' },
-        { status: 401 }
-      );
+    if (!address || typeof address !== 'string') {
+      return NextResponse.json({ error: 'Missing wallet address' }, { status: 400 });
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // 2. Generate a random UUID nonce
     const nonce = crypto.randomUUID();
+    const nonceExpiresAt = new Date(Date.now() + NONCE_TTL_MS);
 
-    // 3. Save the nonce to the user in the database
-    await prisma.user.update({
-      where: { id: payload.userId },
-      data: { nonce },
+    await prisma.user.upsert({
+      where: { walletAddress: address },
+      update: { nonce, nonceExpiresAt },
+      create: {
+        walletAddress: address,
+        nonce,
+        nonceExpiresAt,
+        email: `${address}@wallet.local`, // placeholder — wallet-only accounts
+        password: '',
+      },
     });
 
-    // 4. Return the nonce to the client
-    return NextResponse.json(
-      { success: true, nonce },
-      { status: 200 }
-    );
+    return NextResponse.json({ nonce }, { status: 200 });
   } catch (error) {
-    console.error('Error generating nonce:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    logger.error('Error generating wallet nonce', { err: error });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

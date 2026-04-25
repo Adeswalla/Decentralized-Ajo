@@ -8,13 +8,21 @@ import {
   getRefreshTokenExpiryDate,
   isSecureCookieEnvironment,
 } from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, errorResponse } from '@/lib/api-helpers';
 import { LoginSchema } from '@/lib/validations/auth';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/auth/login' });
 
 export async function POST(request: NextRequest) {
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.auth, 'auth:login');
-  if (rateLimited) return rateLimited;
+  // 1. Rate Limiting
+  const rateLimitResponse = await applyRateLimit(
+    request,
+    RATE_LIMITS.auth,
+    'auth-login',
+  );
+  if (rateLimitResponse) return rateLimitResponse;
 
   const { data, error } = await validateBody(request, LoginSchema);
   if (error) return error;
@@ -24,15 +32,32 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        firstName: true,
+        lastName: true,
+        walletAddress: true,
+        verified: true,
+      },
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return errorResponse(request, { code: 'invalid_credentials', message: 'Invalid email or password' }, 401);
     }
 
     const isValidPassword = await verifyPassword(password, user.password);
     if (!isValidPassword) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return errorResponse(request, { code: 'invalid_credentials', message: 'Invalid email or password' }, 401);
+    }
+
+    if (!user.verified) {
+      return errorResponse(
+        request,
+        { code: 'email_not_verified', message: 'Please verify your email address before logging in.' },
+        403,
+      );
     }
 
     const token = generateToken({
@@ -69,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (err) {
-    console.error('Login error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    logger.error('Login error', { err });
+    return errorResponse(request, { code: 'internal_error', message: 'Internal server error' }, 500);
   }
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/notifications/[id]/read' });
 
 // PATCH /api/notifications/[id]/read — mark a single notification as read
 export async function PATCH(
@@ -29,7 +32,7 @@ export async function PATCH(
 
     return NextResponse.json({ notification: updated });
   } catch (err) {
-    console.error('Mark notification read error:', err);
+    logger.error('Mark notification read error', { err, notificationId: id });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

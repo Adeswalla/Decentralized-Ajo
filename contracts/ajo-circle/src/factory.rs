@@ -46,7 +46,10 @@ impl AjoFactory {
         let salt = BytesN::from_array(&env, &salt_bytes);
 
         // Soroban deployment by wasm hash acts as the cost-efficient, reusable deploy path.
-        let ajo_address = env.deployer().with_current_contract(salt).deploy(ajo_wasm_hash);
+        let ajo_address = env
+            .deployer()
+            .with_current_contract(salt)
+            .deploy(ajo_wasm_hash);
 
         let ajo_client = AjoCircleClient::new(&env, &ajo_address);
         ajo_client.initialize_circle(

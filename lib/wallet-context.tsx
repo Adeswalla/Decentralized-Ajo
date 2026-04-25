@@ -1,9 +1,18 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { STELLAR_CONFIG, isValidStellarAddress, getSorobanClient } from './stellar-config';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  STELLAR_CONFIG,
+  isValidStellarAddress,
+  getSorobanClient,
+  getAppNetwork,
+  passphraseToNetworkName,
+  type StellarNetworkName,
+} from './stellar-config';
 import { authenticatedFetch } from './auth-client';
 import * as StellarSdk from '@stellar/stellar-sdk';
+import { toast } from 'sonner';
+import { mapWalletError, type WalletErrorInfo } from './wallet-errors';
 
 interface SignAndSubmitResult {
   hash: string;
@@ -15,7 +24,13 @@ interface WalletContextType {
   walletAddress: string | null;
   isConnected: boolean;
   isLoading: boolean;
-  error: string | null;
+  error: WalletErrorInfo | null;
+  /** Network the wallet extension is currently set to (null = unknown / not connected). */
+  walletNetwork: StellarNetworkName | null;
+  /** True when the wallet's network differs from the app's configured network. */
+  networkMismatch: boolean;
+  /** Dismiss the mismatch warning without disconnecting. */
+  dismissMismatch: () => void;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   signTransaction: (transactionXdr: string) => Promise<string>;
@@ -34,9 +49,69 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<WalletErrorInfo | null>(null);
+  const [walletNetwork, setWalletNetwork] = useState<StellarNetworkName | null>(null);
+  const [mismatchDismissed, setMismatchDismissed] = useState(false);
 
-  // Check if wallet is already connected on mount
+  // Toast errors whenever they occur
+  useEffect(() => {
+    if (error) {
+      toast.error(error.title, {
+        description: (
+          <div className="mt-1 space-y-2">
+            <p className="text-sm">{error.message}</p>
+            {error.recoveryStep && (
+              <p className="text-xs text-muted-foreground italic">
+                {error.recoveryStep}
+              </p>
+            )}
+            {error.cta && (
+              <div className="mt-2">
+                <a
+                  href={error.cta.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-primary hover:underline underline-offset-4"
+                >
+                  {error.cta.label}
+                </a>
+              </div>
+            )}
+          </div>
+        ),
+        duration: 5000,
+      });
+    }
+  }, [error]);
+
+  /** Read the active passphrase from Freighter and update walletNetwork state. */
+  const refreshWalletNetwork = useCallback(async () => {
+    try {
+      const freighter = typeof window !== 'undefined' ? (window as any).freighter : null;
+      if (!freighter) return;
+      // Freighter ≥ 3.x exposes getNetworkDetails(); older versions expose getNetwork()
+      const details =
+        typeof freighter.getNetworkDetails === 'function'
+          ? await freighter.getNetworkDetails()
+          : typeof freighter.getNetwork === 'function'
+          ? await freighter.getNetwork()
+          : null;
+      if (!details) return;
+      // getNetworkDetails returns { networkPassphrase, network, … };
+      // getNetwork returns passphrase string directly on some older builds.
+      const passphrase =
+        typeof details === 'string' ? details : details.networkPassphrase ?? details.passphrase;
+      if (passphrase) {
+        const net = passphraseToNetworkName(passphrase);
+        setWalletNetwork(net);
+        setMismatchDismissed(false); // reset dismiss on any network change
+      }
+    } catch {
+      // Silently ignore — network details are best-effort
+    }
+  }, []);
+
+  // Check if wallet is already connected on mount and refresh network
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -48,6 +123,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             // Store in localStorage
             localStorage.setItem('walletAddress', pubKey);
           }
+          // Always attempt to read network even when not yet connected
+          await refreshWalletNetwork();
         }
       } catch (err) {
         console.error('Error checking wallet connection:', err);
@@ -55,7 +132,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     checkConnection();
-  }, []);
+  }, [refreshWalletNetwork]);
+
+  // Poll for network changes (Freighter doesn't fire an event on network switch)
+  useEffect(() => {
+    if (!walletAddress) return;
+    const interval = setInterval(refreshWalletNetwork, 5000);
+    return () => clearInterval(interval);
+  }, [walletAddress, refreshWalletNetwork]);
+
+  const networkMismatch =
+    !mismatchDismissed &&
+    walletNetwork !== null &&
+    walletNetwork !== getAppNetwork();
+
+  const dismissMismatch = () => setMismatchDismissed(true);
 
   const connectWallet = async () => {
     setIsLoading(true);
@@ -84,6 +175,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setPublicKey(pubKey);
       setWalletAddress(pubKey);
 
+      // Detect wallet's active network immediately after connecting
+      await refreshWalletNetwork();
+
       // Store in localStorage
       localStorage.setItem('walletAddress', pubKey);
 
@@ -105,9 +199,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to connect wallet';
-      setError(errorMessage);
+      const walletError = mapWalletError(err);
+      setError(walletError);
       console.error('Wallet connection error:', err);
     } finally {
       setIsLoading(false);
@@ -140,9 +233,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       return signedXdr;
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to sign transaction';
-      setError(errorMessage);
+      const walletError = mapWalletError(err);
+      setError(walletError);
       throw err;
     }
   };
@@ -202,9 +294,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       // Timeout reached
       throw new Error('Transaction confirmation timeout');
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Transaction failed';
-      setError(errorMessage);
+      const walletError = mapWalletError(err);
+      setError(walletError);
       throw err;
     }
   };
@@ -215,6 +306,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     isConnected: !!walletAddress,
     isLoading,
     error,
+    walletNetwork,
+    networkMismatch,
+    dismissMismatch,
     connectWallet,
     disconnectWallet,
     signTransaction,

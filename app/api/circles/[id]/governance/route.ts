@@ -5,6 +5,9 @@ import { validateBody, applyRateLimit } from '@/lib/api-helpers';
 import { CreateProposalSchema } from '@/lib/validations/governance';
 import type { CreateProposalInput } from '@/lib/validations/governance';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]/governance' });
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +19,7 @@ export async function GET(
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'governance:get', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.api, 'circles:governance-list', payload.userId);
   if (rateLimited) return rateLimited;
 
   try {
@@ -83,7 +86,7 @@ export async function GET(
       totalMembers,
     }, { status: 200 });
   } catch (err) {
-    console.error('Get governance proposals error:', err);
+    logger.error('Get governance proposals error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -143,7 +146,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, proposal }, { status: 201 });
   } catch (err) {
-    console.error('Create governance proposal error:', err);
+    logger.error('Create governance proposal error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -8,6 +8,9 @@ import {
 } from '@/lib/auth';
 import { applyRateLimit } from '@/lib/api-helpers';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/auth/logout' });
 
 export async function POST(request: NextRequest) {
   const token = extractToken(request.headers.get('authorization'));
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.auth, 'auth:logout', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.auth, 'auth:logout');
   if (rateLimited) return rateLimited;
 
   try {
@@ -35,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (err) {
-    console.error('Logout error:', err);
+    logger.error('Logout error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

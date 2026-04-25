@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this';
-const JWT_EXPIRATION = '1h';
+const JWT_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 export const REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
 
@@ -43,12 +43,13 @@ export function isSecureCookieEnvironment(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-export async function generateRefreshToken(userId: string): Promise<string> {
+export async function generateRefreshToken(userId: string, familyId?: string): Promise<string> {
   const token = crypto.randomUUID();
   await prisma.refreshToken.create({
     data: {
       token,
       userId,
+      familyId,
       expiresAt: getRefreshTokenExpiryDate(),
     },
   });
@@ -58,27 +59,42 @@ export async function generateRefreshToken(userId: string): Promise<string> {
 export async function rotateRefreshToken(token: string): Promise<{ token: string; userId: string } | null> {
   const existingToken = await prisma.refreshToken.findUnique({
     where: { token },
-    select: { token: true, userId: true, expiresAt: true },
+    select: { token: true, userId: true, expiresAt: true, rotatedAt: true, familyId: true },
   });
 
+  // If token doesn't exist or is expired
   if (!existingToken || existingToken.expiresAt <= new Date()) {
-    if (existingToken) {
-      await prisma.refreshToken.delete({ where: { token: existingToken.token } });
-    }
+    return null;
+  }
+
+  // REUSE DETECTION: If token was already rotated, someone is trying to reuse an old token.
+  // Invalidate the entire family for security.
+  if (existingToken.rotatedAt) {
+    await prisma.refreshToken.deleteMany({
+      where: { familyId: existingToken.familyId },
+    });
     return null;
   }
 
   const newToken = crypto.randomUUID();
 
+  // Mark current token as rotated and create new one in the same family
   await prisma.$transaction([
-    prisma.refreshToken.delete({ where: { token: existingToken.token } }),
+    prisma.refreshToken.update({
+      where: { token: existingToken.token },
+      data: { rotatedAt: new Date() },
+    }),
     prisma.refreshToken.create({
       data: {
         token: newToken,
         userId: existingToken.userId,
+        familyId: existingToken.familyId,
         expiresAt: getRefreshTokenExpiryDate(),
       },
     }),
+    // Cleanup old rotated tokens in this family (keep only the last one for reuse detection)
+    // Actually, we should probably keep them for a short while or just delete very old ones.
+    // For now, let's just keep the chain.
   ]);
 
   return { token: newToken, userId: existingToken.userId };

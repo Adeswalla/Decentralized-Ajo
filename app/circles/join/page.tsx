@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Users, TrendingUp, Calendar, Loader2 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 
 interface CirclePreview {
   id: string;
@@ -34,6 +35,7 @@ function JoinCircleContent() {
   const [previewing, setPreviewing] = useState(false);
   const [joining, setJoining] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const joinRequestInFlightRef = useRef(false);
 
   // Auto-preview when ?id= is present in URL
   useEffect(() => {
@@ -86,7 +88,9 @@ function JoinCircleContent() {
   };
 
   const handleJoin = async () => {
-    if (!preview) return;
+    if (!preview || joinRequestInFlightRef.current) return;
+
+    joinRequestInFlightRef.current = true;
     setJoining(true);
 
     try {
@@ -116,6 +120,7 @@ function JoinCircleContent() {
     } catch {
       toast.error('An error occurred. Please try again.');
     } finally {
+      joinRequestInFlightRef.current = false;
       setJoining(false);
     }
   };
@@ -165,8 +170,8 @@ function JoinCircleContent() {
                   disabled={previewing}
                 />
               </div>
-              <Button type="submit" disabled={!circleIdInput.trim() || previewing}>
-                {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Look Up'}
+              <Button type="submit" disabled={!circleIdInput.trim()} isLoading={previewing}>
+                Look Up
               </Button>
             </form>
 
@@ -198,7 +203,7 @@ function JoinCircleContent() {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="p-3 rounded-lg bg-muted">
                   <TrendingUp className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
-                  <p className="text-lg font-bold">{preview.contributionAmount} XLM</p>
+                  <p className="text-lg font-bold">{formatAmount(preview.contributionAmount)} XLM</p>
                   <p className="text-xs text-muted-foreground">Per round</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
@@ -242,15 +247,8 @@ function JoinCircleContent() {
                   This circle is not accepting new members.
                 </p>
               ) : (
-                <Button className="w-full" onClick={handleJoin} disabled={joining}>
-                  {joining ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Joining...
-                    </>
-                  ) : (
-                    'Confirm Join'
-                  )}
+                <Button className="w-full" onClick={handleJoin} disabled={joining} isLoading={joining}>
+                  Confirm Join
                 </Button>
               )}
             </CardContent>

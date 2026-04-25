@@ -1,0 +1,40 @@
+name: EVM Contracts CI
+
+on:
+  push:
+    paths:
+      - "contracts/ajo-circle-evm/**"
+  pull_request:
+    paths:
+      - "contracts/ajo-circle-evm/**"
+
+jobs:
+  build-and-test:
+    name: Compile, Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts/ajo-circle-evm
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: contracts/ajo-circle-evm/package-lock.json
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Compile Contracts
+        run: npm run compile
+
+      - name: Lint Solidity
+        run: npm run lint:sol
+
+      - name: Run Tests
+        run: npm test

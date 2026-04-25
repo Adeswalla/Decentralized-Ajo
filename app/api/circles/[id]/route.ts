@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, errorResponse } from '@/lib/api-helpers';
 import { UpdateCircleSchema } from '@/lib/validations/circle';
 import type { UpdateCircleInput } from '@/lib/validations/circle';
 import { RATE_LIMITS } from '@/lib/rate-limit';
-import { cacheGet, cacheSet, cacheDel, invalidatePrefix } from '@/lib/cache';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]' });
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const token = extractToken(request.headers.get('authorization'));
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!token) return errorResponse(request, { code: 'unauthorized', message: 'Unauthorized' }, 401);
 
   const payload = verifyToken(token);
-  if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+  if (!payload) return errorResponse(request, { code: 'invalid_token', message: 'Invalid or expired token' }, 401);
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:get', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.api, 'circles:get', payload.userId);
   if (rateLimited) return rateLimited;
 
   try {
@@ -50,13 +52,13 @@ export async function GET(
       },
     });
 
-    if (!circle) return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
+    if (!circle) return errorResponse(request, { code: 'not_found', message: 'Circle not found' }, 404);
 
     const isMember = circle.members.some((m: { userId: string }) => m.userId === payload.userId);
     const isOrganizer = circle.organizerId === payload.userId;
 
     if (!isMember && !isOrganizer) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return errorResponse(request, { code: 'forbidden', message: 'Forbidden' }, 403);
     }
 
     const responseBody = { success: true, circle };
@@ -64,8 +66,8 @@ export async function GET(
 
     return NextResponse.json(responseBody, { status: 200 });
   } catch (err) {
-    console.error('Get circle error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    logger.error('Get circle error', { err });
+    return errorResponse(request, { code: 'internal_error', message: 'Internal server error' }, 500);
   }
 }
 
@@ -74,10 +76,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const token = extractToken(request.headers.get('authorization'));
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!token) return errorResponse(request, { code: 'unauthorized', message: 'Unauthorized' }, 401);
 
   const payload = verifyToken(token);
-  if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+  if (!payload) return errorResponse(request, { code: 'invalid_token', message: 'Invalid or expired token' }, 401);
 
   const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:update', payload.userId);
   if (rateLimited) return rateLimited;
@@ -90,10 +92,10 @@ export async function PUT(
     const { id } = await params;
 
     const circle = await prisma.circle.findUnique({ where: { id } });
-    if (!circle) return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
+    if (!circle) return errorResponse(request, { code: 'not_found', message: 'Circle not found' }, 404);
 
     if (circle.organizerId !== payload.userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return errorResponse(request, { code: 'forbidden', message: 'Forbidden' }, 403);
     }
 
     const updatedCircle = await prisma.circle.update({
@@ -115,7 +117,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, circle: updatedCircle }, { status: 200 });
   } catch (err) {
-    console.error('Update circle error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    logger.error('Update circle error', { err });
+    return errorResponse(request, { code: 'internal_error', message: 'Internal server error' }, 500);
   }
 }

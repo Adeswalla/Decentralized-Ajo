@@ -1,8 +1,32 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
 
+// ---------------------------------------------------------------------------
+// Known Stellar networks
+// ---------------------------------------------------------------------------
+export const KNOWN_NETWORKS = {
+  testnet: {
+    name: 'testnet',
+    label: 'Testnet',
+    passphrase: 'Test SDF Network ; September 2015',
+    horizonUrl: 'https://horizon-testnet.stellar.org',
+    sorobanRpcUrl: 'https://soroban-testnet.stellar.org',
+    color: 'amber',   // used for badge styling
+  },
+  mainnet: {
+    name: 'mainnet',
+    label: 'Mainnet',
+    passphrase: 'Public Global Stellar Network ; September 2015',
+    horizonUrl: 'https://horizon.stellar.org',
+    sorobanRpcUrl: 'https://soroban.stellar.org',
+    color: 'emerald', // used for badge styling
+  },
+} as const;
+
+export type StellarNetworkName = keyof typeof KNOWN_NETWORKS;
+
 export const STELLAR_CONFIG = {
   // Network configuration
-  network: process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet',
+  network: (process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet') as StellarNetworkName,
   horizonUrl: process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org',
   networkPassphrase: process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015',
   
@@ -14,6 +38,36 @@ export const STELLAR_CONFIG = {
   
   // Wallet network details
   walletNetworkDetailsPublicKey: process.env.NEXT_PUBLIC_WALLET_NETWORK_DETAILS_PUBLIC_KEY || 'public',
+};
+
+// ---------------------------------------------------------------------------
+// Network helpers
+// ---------------------------------------------------------------------------
+
+/** Returns the configured app network name ("testnet" | "mainnet"). */
+export const getAppNetwork = (): StellarNetworkName => {
+  const n = STELLAR_CONFIG.network.toLowerCase();
+  return n === 'mainnet' ? 'mainnet' : 'testnet';
+};
+
+/** True when the app is configured for Stellar Mainnet. */
+export const isMainnet = (): boolean => getAppNetwork() === 'mainnet';
+
+/** Human-readable display label for the app's configured network. */
+export const getNetworkDisplayLabel = (): string =>
+  KNOWN_NETWORKS[getAppNetwork()].label;
+
+/**
+ * Derive a network name from a Freighter/Lobstr network passphrase string.
+ * Returns null when the passphrase is unrecognised.
+ */
+export const passphraseToNetworkName = (
+  passphrase: string
+): StellarNetworkName | null => {
+  for (const [key, cfg] of Object.entries(KNOWN_NETWORKS)) {
+    if (cfg.passphrase === passphrase) return key as StellarNetworkName;
+  }
+  return null;
 };
 
 // Initialize Stellar SDK

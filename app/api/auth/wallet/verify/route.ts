@@ -2,99 +2,65 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 import { prisma } from '@/lib/prisma';
-import { extractToken, verifyToken } from '@/lib/auth';
+import { generateToken, generateRefreshToken, getRefreshTokenExpiryDate, isSecureCookieEnvironment, REFRESH_TOKEN_COOKIE_NAME } from '@/lib/auth';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/auth/wallet/verify' });
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate the user
-    const authHeader = request.headers.get('Authorization');
-    const token = extractToken(authHeader);
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized: No token provided' },
-        { status: 401 }
-      );
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // 2. Parse request body
-    const body = await request.json();
-    const { address, signature, nonce } = body;
+    const { address, signature, nonce } = await request.json();
 
     if (!address || !signature || !nonce) {
       return NextResponse.json(
-        { error: 'Missing required fields: address, signature, or nonce' },
+        { error: 'Missing required fields: address, signature, nonce' },
         { status: 400 }
       );
     }
 
-    // 3. Retrieve user from DB and check nonce
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, nonce: true },
+      where: { walletAddress: address },
+      select: { id: true, email: true, nonce: true, nonceExpiresAt: true },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+    if (!user || user.nonce !== nonce) {
+      return NextResponse.json({ error: 'Invalid or expired nonce' }, { status: 401 });
     }
 
-    // The nonce must match the one stored in the DB and cannot be empty
-    if (!user.nonce || user.nonce !== nonce) {
-      return NextResponse.json(
-        { error: 'Invalid, reused, or expired nonce' },
-        { status: 400 }
-      );
+    if (!user.nonceExpiresAt || user.nonceExpiresAt < new Date()) {
+      return NextResponse.json({ error: 'Nonce has expired' }, { status: 401 });
     }
 
-    // 4. Verify the signature using stellar-sdk
-    let isValid = false;
+    // Verify Stellar signature
     try {
       const keypair = Keypair.fromPublicKey(address);
-      isValid = keypair.verify(Buffer.from(nonce), Buffer.from(signature, 'base64'));
-    } catch (e) {
-      return NextResponse.json(
-        { error: 'Invalid address or signature format' },
-        { status: 400 }
-      );
+      const valid = keypair.verify(Buffer.from(nonce), Buffer.from(signature, 'base64'));
+      if (!valid) throw new Error();
+    } catch {
+      return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
     }
 
-    if (!isValid) {
-      return NextResponse.json(
-        { error: 'Signature verification failed' },
-        { status: 400 }
-      );
-    }
-
-    // 5. Update user in DB (mark verified, set address, nullify nonce)
+    // Consume the nonce and mark wallet verified
     await prisma.user.update({
       where: { id: user.id },
-      data: { 
-        walletAddress: address, 
-        isWalletVerified: true,
-        nonce: null // Make it single-use
-      },
+      data: { isWalletVerified: true, nonce: null, nonceExpiresAt: null },
     });
 
-    return NextResponse.json(
-      { success: true, message: 'Wallet successfully verified' },
-      { status: 200 }
-    );
+    const accessToken = generateToken({ userId: user.id, email: user.email, walletAddress: address });
+    const refreshToken = await generateRefreshToken(user.id);
+
+    const response = NextResponse.json({ token: accessToken, address }, { status: 200 });
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: isSecureCookieEnvironment(),
+      sameSite: 'strict',
+      expires: getRefreshTokenExpiryDate(),
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
-    console.error('Error verifying wallet:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    logger.error('Error verifying wallet', { err: error });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
