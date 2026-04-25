@@ -800,3 +800,347 @@ mod tests {
         assert!(client.get_last_deposit_timestamp(&member).is_ok());
     }
 }
+    #[test]
+    fn test_deposit_exact_contribution_updates_pool_and_timestamp() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, _organizer, member, _token) = setup_circle_with_member(&env);
+
+        assert_eq!(client.get_total_pool(), 0);
+        assert_eq!(client.deposit(&member), Ok(()));
+        assert_eq!(client.get_total_pool(), 100_i128);
+        assert!(client.get_last_deposit_timestamp(&member).is_ok());
+    }
+
+    // ── contribute() unit tests ───────────────────────────────────────────────
+
+    /// Shared fixture: fresh circle with `contribution_amount = 100`, `max_rounds = 3`,
+    /// `max_members = 3`. Returns (client, organizer, member_b, member_c, token_address).
+    /// No contributions have been made yet.
+    fn setup_contribute(
+        env: &Env,
+    ) -> (AjoCircleClient<'_>, Address, Address, Address, Address) {
+        let contract_id = env.register_contract(None, AjoCircle);
+        let client = AjoCircleClient::new(env, &contract_id);
+
+        let admin = Address::generate(env);
+        let organizer = Address::generate(env);
+        let member_b = Address::generate(env);
+        let member_c = Address::generate(env);
+
+        let token_address = env.register_stellar_asset_contract(admin.clone());
+        let token_admin = token::StellarAssetClient::new(env, &token_address);
+
+        // Mint enough for several rounds each
+        token_admin.mint(&organizer, &10_000_i128);
+        token_admin.mint(&member_b, &10_000_i128);
+        token_admin.mint(&member_c, &10_000_i128);
+
+        // contribution_amount=100, frequency_days=7, max_rounds=3, max_members=3
+        client.initialize_circle(&organizer, &token_address, &100_i128, &7_u32, &3_u32, &3_u32);
+        client.add_member(&organizer, &member_b);
+        client.add_member(&organizer, &member_c);
+
+        (client, organizer, member_b, member_c, token_address)
+    }
+
+    // ── Error paths ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn contribute_rejects_zero_amount() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        assert_eq!(client.contribute(&organizer, &0_i128), Err(AjoError::InvalidInput));
+    }
+
+    #[test]
+    fn contribute_rejects_negative_amount() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        assert_eq!(client.contribute(&organizer, &-1_i128), Err(AjoError::InvalidInput));
+    }
+
+    #[test]
+    fn contribute_blocked_when_panicked() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, _, _) = setup_contribute(&env);
+
+        client.panic(&organizer);
+        assert_eq!(client.contribute(&member_b, &100_i128), Err(AjoError::CirclePanicked));
+    }
+
+    #[test]
+    fn contribute_rejects_non_member() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, _, _, _, _) = setup_contribute(&env);
+
+        // stranger was never added to the circle
+        let stranger = Address::generate(&env);
+        assert_eq!(client.contribute(&stranger, &100_i128), Err(AjoError::NotFound));
+    }
+
+    #[test]
+    fn contribute_rejects_member_with_missed_count_at_threshold() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, _, _) = setup_contribute(&env);
+
+        // Slash member_b three times to hit the disqualification threshold
+        client.slash_member(&organizer, &member_b);
+        client.slash_member(&organizer, &member_b);
+        client.slash_member(&organizer, &member_b);
+
+        assert_eq!(client.contribute(&member_b, &100_i128), Err(AjoError::Disqualified));
+    }
+
+    #[test]
+    fn contribute_rejects_inactive_member() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, _, _) = setup_contribute(&env);
+
+        // boot_dormant_member sets is_active = false directly
+        client.boot_dormant_member(&organizer, &member_b);
+
+        assert_eq!(client.contribute(&member_b, &100_i128), Err(AjoError::Disqualified));
+    }
+
+    // ── Partial contribution (below round target) ─────────────────────────────
+
+    #[test]
+    fn contribute_partial_accumulates_without_advancing_round() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        // Round target for round 1 = 1 * 100 = 100. Pay only 50.
+        assert_eq!(client.contribute(&organizer, &50_i128), Ok(()));
+
+        let state = client.get_circle_state().unwrap();
+        assert_eq!(state.current_round, 1, "round must not advance on partial payment");
+
+        let balance = client.get_member_balance(&organizer).unwrap();
+        assert_eq!(balance.total_contributed, 50_i128);
+
+        // RoundContribCount must still be 0 (organizer hasn't crossed the threshold yet)
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn contribute_partial_debits_token_balance() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, token_address) = setup_contribute(&env);
+        let token_client = token::Client::new(&env, &token_address);
+
+        let before = token_client.balance(&organizer);
+        client.contribute(&organizer, &40_i128);
+        assert_eq!(token_client.balance(&organizer), before - 40);
+    }
+
+    // ── Exact / completing contribution ───────────────────────────────────────
+
+    #[test]
+    fn contribute_exact_amount_marks_member_as_completed_for_round() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        assert_eq!(client.contribute(&organizer, &100_i128), Ok(()));
+
+        let balance = client.get_member_balance(&organizer).unwrap();
+        assert_eq!(balance.total_contributed, 100_i128);
+
+        // One member completed; count should be 1 (3 members total, round not yet advanced)
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+
+        // Round still 1 — not all members have contributed
+        assert_eq!(client.get_circle_state().unwrap().current_round, 1);
+    }
+
+    #[test]
+    fn contribute_over_amount_still_counts_as_round_completion() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        // Pay 150 when target is 100 — should still flip the "completed" flag
+        assert_eq!(client.contribute(&organizer, &150_i128), Ok(()));
+
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+    }
+
+    // ── Round advancement ─────────────────────────────────────────────────────
+
+    #[test]
+    fn contribute_all_members_complete_round_advances() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, member_c, _) = setup_contribute(&env);
+
+        // All three members contribute the exact round amount
+        client.contribute(&organizer, &100_i128);
+        client.contribute(&member_b, &100_i128);
+
+        // Still round 1 after two of three
+        assert_eq!(client.get_circle_state().unwrap().current_round, 1);
+
+        // Third member tips it over
+        client.contribute(&member_c, &100_i128);
+
+        let state = client.get_circle_state().unwrap();
+        assert_eq!(state.current_round, 2, "round must advance when all members complete");
+
+        // Counter must reset to 0 after round advance
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn contribute_round_advance_extends_deadline() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, member_c, _) = setup_contribute(&env);
+
+        let deadline_before: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundDeadline)
+            .unwrap_or(0);
+
+        client.contribute(&organizer, &100_i128);
+        client.contribute(&member_b, &100_i128);
+        client.contribute(&member_c, &100_i128);
+
+        let deadline_after: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundDeadline)
+            .unwrap_or(0);
+
+        // frequency_days = 7 → 7 * 86_400 = 604_800 seconds added
+        assert_eq!(deadline_after, deadline_before + 604_800);
+    }
+
+    // ── Final round boundary ──────────────────────────────────────────────────
+
+    #[test]
+    fn contribute_does_not_advance_past_max_rounds() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, member_c, _) = setup_contribute(&env);
+
+        // max_rounds = 3; complete all three rounds
+        for _ in 0..3 {
+            client.contribute(&organizer, &100_i128);
+            client.contribute(&member_b, &100_i128);
+            client.contribute(&member_c, &100_i128);
+        }
+
+        let state = client.get_circle_state().unwrap();
+        assert_eq!(state.current_round, 3, "current_round must not exceed max_rounds");
+    }
+
+    // ── Missed-count reset ────────────────────────────────────────────────────
+
+    #[test]
+    fn contribute_resets_missed_count_on_success() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, _, _) = setup_contribute(&env);
+
+        // Give member_b two strikes (below the disqualification threshold of 3)
+        client.slash_member(&organizer, &member_b);
+        client.slash_member(&organizer, &member_b);
+
+        // Successful contribution must reset missed_count to 0
+        assert_eq!(client.contribute(&member_b, &100_i128), Ok(()));
+
+        let standings: Map<Address, MemberStanding> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Standings)
+            .unwrap();
+        let standing = standings.get(member_b).unwrap();
+        assert_eq!(standing.missed_count, 0);
+    }
+
+    // ── Idempotency of the "already completed" guard ──────────────────────────
+
+    #[test]
+    fn contribute_second_payment_in_same_round_does_not_double_count() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, _, _, _) = setup_contribute(&env);
+
+        // First payment completes the round for organizer
+        client.contribute(&organizer, &100_i128);
+
+        let count_after_first: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+
+        // Second payment in the same round — organizer already crossed the threshold
+        client.contribute(&organizer, &50_i128);
+
+        let count_after_second: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundContribCount)
+            .unwrap_or(0);
+
+        assert_eq!(
+            count_after_first, count_after_second,
+            "RoundContribCount must not increment again for the same member in the same round"
+        );
+    }
+
+    // ── Token accounting ──────────────────────────────────────────────────────
+
+    #[test]
+    fn contribute_full_round_debits_correct_token_amounts() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, organizer, member_b, member_c, token_address) = setup_contribute(&env);
+        let token_client = token::Client::new(&env, &token_address);
+
+        let org_before = token_client.balance(&organizer);
+        let b_before = token_client.balance(&member_b);
+        let c_before = token_client.balance(&member_c);
+
+        client.contribute(&organizer, &100_i128);
+        client.contribute(&member_b, &100_i128);
+        client.contribute(&member_c, &100_i128);
+
+        assert_eq!(token_client.balance(&organizer), org_before - 100);
+        assert_eq!(token_client.balance(&member_b), b_before - 100);
+        assert_eq!(token_client.balance(&member_c), c_before - 100);
+    }
+}
