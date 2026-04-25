@@ -4,16 +4,21 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CircleDot, LayoutDashboard, PlusCircle, Users, ArrowLeftRight, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NavigationSearch } from './navigation-search';
 
 export const navLinks = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/circles/create', label: 'Create Circle', icon: PlusCircle },
-  { href: '/circles/join', label: 'Join Circle', icon: Users },
-  { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { href: '/profile', label: 'Profile', icon: Wallet },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard, keywords: ['home', 'overview', 'main'] },
+  { href: '/circles/create', label: 'Create Circle', icon: PlusCircle, keywords: ['new', 'add', 'start'] },
+  { href: '/circles/join', label: 'Join Circle', icon: Users, keywords: ['participate', 'member', 'group'] },
+  { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight, keywords: ['history', 'payments', 'transfers'] },
+  { href: '/profile', label: 'Profile', icon: Wallet, keywords: ['account', 'settings', 'user', 'wallet'] },
 ];
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+  return <NavigationSearch items={navLinks} onNavigate={onNavigate} />;
+}
+
+export function SidebarNavLegacy({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-1">
