@@ -670,6 +670,11 @@ fn test_boot_dormant_member_deactivates_member() {
 
     let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
 
+    // Must reach the dormancy threshold before booting
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+
     client.boot_dormant_member(&organizer, &user_a).unwrap();
 
     // Booted member cannot deposit
@@ -1325,5 +1330,196 @@ fn test_integration_round_boundary_double_actions() {
     // Organizer's total contributed should be 200
     let org_balance = client.get_member_balance(&organizer).unwrap();
     assert_eq!(org_balance.total_contributed, 200);
+}
+
+// ─── Issue #658: input validation — new coverage ──────────────────────────────
+
+#[test]
+fn test_join_circle_while_paused_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup(&env, 100, 5);
+    client.panic(&organizer).unwrap();
+
+    let result = client.join_circle(&organizer, &user_a);
+    assert_eq!(result, Err(AjoError::Paused));
+}
+
+#[test]
+fn test_shuffle_rotation_while_paused_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup_with_members(&env);
+    client.panic(&organizer).unwrap();
+
+    let result = client.shuffle_rotation(&organizer);
+    assert_eq!(result, Err(AjoError::Paused));
+}
+
+#[test]
+fn test_start_dissolution_vote_invalid_threshold_mode_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup_with_members(&env);
+
+    // threshold_mode is a binary flag: 0 = simple majority, 1 = supermajority
+    let result = client.start_dissolution_vote(&organizer, &2_u32);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_vote_to_dissolve_non_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup_with_members(&env);
+    client.start_dissolution_vote(&organizer, &0_u32).unwrap();
+
+    let stranger = Address::generate(&env);
+    let result = client.vote_to_dissolve(&stranger);
+    assert_eq!(result, Err(AjoError::Unauthorized));
+}
+
+#[test]
+fn test_grant_role_invalid_role_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+    let bad_role = soroban_sdk::symbol_short!("BADROL");
+
+    let result = client.grant_role(&organizer, &bad_role, &user_a);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_revoke_role_invalid_role_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+    let bad_role = soroban_sdk::symbol_short!("BADROL");
+
+    let result = client.revoke_role(&organizer, &bad_role, &user_a);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_set_kyc_status_non_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, _a, _b) = setup_with_members(&env);
+    let stranger = Address::generate(&env);
+
+    let result = client.set_kyc_status(&organizer, &stranger, &true);
+    assert_eq!(result, Err(AjoError::NotFound));
+}
+
+#[test]
+fn test_boot_dormant_member_active_member_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    // user_a has not missed any contributions — booting should be rejected
+    let result = client.boot_dormant_member(&organizer, &user_a);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_contribute_disqualified_member_returns_error() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    // Slash 3 times to disqualify
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+
+    let result = client.contribute(&user_a, &100);
+    assert_eq!(result, Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_deposit_disqualified_member_returns_error() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _tok, organizer, user_a, _b) = setup_with_members(&env);
+
+    // Slash 3 times to disqualify
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+    client.slash_member(&organizer, &user_a).unwrap();
+
+    let result = client.deposit(&user_a);
+    assert_eq!(result, Err(AjoError::Disqualified));
+}
+
+#[test]
+fn test_initialize_circle_below_min_contribution_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // MIN_CONTRIBUTION_AMOUNT = 1_000_000; passing less should fail
+    let result = client.initialize_circle(&organizer, &token, &999_999, &7, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_initialize_circle_above_max_contribution_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // MAX_CONTRIBUTION_AMOUNT = 10_000_000_000; passing more should fail
+    let result = client.initialize_circle(&organizer, &token, &10_000_000_001, &7, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_initialize_circle_above_max_frequency_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // MAX_FREQUENCY_DAYS = 365
+    let result = client.initialize_circle(&organizer, &token, &1_000_000, &366, &12, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
+}
+
+#[test]
+fn test_initialize_circle_above_max_rounds_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, AjoCircle);
+    let client = AjoCircleClient::new(&env, &contract_id);
+    let organizer = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // MAX_ROUNDS = 100
+    let result = client.initialize_circle(&organizer, &token, &1_000_000, &7, &101, &5);
+    assert_eq!(result, Err(AjoError::InvalidInput));
 }
 
