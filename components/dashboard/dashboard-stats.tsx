@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CircleDot, Users, TrendingUp, Wallet } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 
 interface Stats {
   activeCircles: number;
@@ -89,7 +90,7 @@ export function DashboardStats() {
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.totalContributed.toFixed(2)} XLM</div>
+          <div className="text-2xl font-bold">{formatAmount(stats.totalContributed)} XLM</div>
           <p className="text-xs text-muted-foreground">{stats.contributionCount} contributions</p>
         </CardContent>
       </Card>
@@ -100,7 +101,7 @@ export function DashboardStats() {
           <Wallet className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.totalWithdrawn.toFixed(2)} XLM</div>
+          <div className="text-2xl font-bold">{formatAmount(stats.totalWithdrawn)} XLM</div>
           <p className="text-xs text-muted-foreground">Emergency withdrawals</p>
         </CardContent>
       </Card>

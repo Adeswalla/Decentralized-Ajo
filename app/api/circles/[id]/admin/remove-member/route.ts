@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, validateId } from '@/lib/api-helpers';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { createChildLogger } from '@/lib/logger';
 
 const RemoveMemberSchema = z.object({
   memberId: z.string().min(1, 'Member ID is required'),
 });
+const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]/admin/remove-member' });
 
 export async function POST(
   request: NextRequest,
@@ -19,7 +21,7 @@ export async function POST(
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:admin:remove', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.sensitive, 'circles:admin-remove', payload.userId);
   if (rateLimited) return rateLimited;
 
   const validated = await validateBody(request, RemoveMemberSchema);
@@ -28,6 +30,8 @@ export async function POST(
 
   try {
     const { id: circleId } = await params;
+    const idError = validateId(request, circleId);
+    if (idError) return idError;
 
     // Verify circle exists and user is organizer
     const circle = await prisma.circle.findUnique({
@@ -74,7 +78,7 @@ export async function POST(
       { status: 200 }
     );
   } catch (err) {
-    console.error('Remove member error:', err);
+    logger.error('Remove member error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

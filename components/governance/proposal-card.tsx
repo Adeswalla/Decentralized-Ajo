@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -105,10 +106,25 @@ export function ProposalCard({ proposal, onVote, isWalletConnected }: ProposalCa
   const canVote = proposal.status === 'ACTIVE' && !proposal.userVote && !isExpired && isWalletConnected;
 
   const handleSubmitVote = async () => {
-    if (!selectedVote) return;
+    if (!selectedVote || isSubmitting) return;
     setIsSubmitting(true);
+    
+    // Set a timeout for the request as per acceptance criteria (>5s)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timed out. Please try again.')), 5000)
+    );
+
     try {
-      await onVote(proposal.id, selectedVote);
+      await Promise.race([
+        onVote(proposal.id, selectedVote),
+        timeoutPromise
+      ]);
+    } catch (error: any) {
+      console.error('Vote error:', error);
+      if (error.message === 'Request timed out. Please try again.') {
+        toast.error(error.message);
+      }
+      // Other errors are handled by the parent's onVote/handleVote
     } finally {
       setIsSubmitting(false);
     }
@@ -217,26 +233,25 @@ export function ProposalCard({ proposal, onVote, isWalletConnected }: ProposalCa
           <RadioGroup
             value={selectedVote}
             onValueChange={setSelectedVote}
-            className="flex gap-4 w-full justify-center"
+            className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full justify-center"
           >
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="YES" id={`yes-${proposal.id}`} />
-              <Label htmlFor={`yes-${proposal.id}`} className="text-sm cursor-pointer">Yes</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="YES" id={`yes-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`yes-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">Yes</Label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="NO" id={`no-${proposal.id}`} />
-              <Label htmlFor={`no-${proposal.id}`} className="text-sm cursor-pointer">No</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="NO" id={`no-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`no-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">No</Label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="ABSTAIN" id={`abstain-${proposal.id}`} />
-              <Label htmlFor={`abstain-${proposal.id}`} className="text-sm cursor-pointer">Abstain</Label>
+            <div className="flex items-center gap-2 bg-background border rounded-md px-3 sm:border-none sm:bg-transparent sm:px-0">
+              <RadioGroupItem value="ABSTAIN" id={`abstain-${proposal.id}`} className="w-5 h-5 sm:w-4 sm:h-4" />
+              <Label htmlFor={`abstain-${proposal.id}`} className="text-sm cursor-pointer w-full py-3 sm:py-0">Abstain</Label>
             </div>
           </RadioGroup>
           <Button
             onClick={handleSubmitVote}
             disabled={!selectedVote || isSubmitting}
-            className="w-full"
-            size="sm"
+            className="w-full min-h-[44px] sm:min-h-0"
           >
             {isSubmitting ? (
               'Submitting...'

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, validateId } from '@/lib/api-helpers';
 import { CastVoteSchema } from '@/lib/validations/governance';
 import type { CastVoteInput } from '@/lib/validations/governance';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]/governance/[proposalId]/vote' });
 
 export async function POST(
   request: NextRequest,
@@ -16,7 +19,7 @@ export async function POST(
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'governance:vote', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.sensitive, 'circles:governance-vote', payload.userId);
   if (rateLimited) return rateLimited;
 
   const validated = await validateBody(request, CastVoteSchema);
@@ -25,6 +28,8 @@ export async function POST(
 
   try {
     const { id: circleId, proposalId } = await params;
+    const idError = validateId(request, circleId);
+    if (idError) return idError;
 
     // Verify circle and membership
     const circle = await prisma.circle.findUnique({
@@ -115,7 +120,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, vote }, { status: 201 });
   } catch (err) {
-    console.error('Cast vote error:', err);
+    logger.error('Cast vote error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken, extractToken } from '@/lib/auth';
 import { isValidStellarAddress } from '@/lib/stellar-config';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, authorize } from '@/lib/api-helpers';
 import { UpdateWalletSchema } from '@/lib/validations/user';
 import { RATE_LIMITS } from '@/lib/rate-limit';
+import { createChildLogger } from '@/lib/logger';
+
+const logger = createChildLogger({ service: 'api', route: '/api/users/update-wallet' });
 
 export async function PATCH(request: NextRequest) {
-  const token = extractToken(request.headers.get('authorization'));
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { payload, error } = await authorize(request, ['user:write']);
+  if (error) return error;
 
-  const payload = verifyToken(token);
-  if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'users:update-wallet', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.api, 'users:update-wallet', payload.userId);
   if (rateLimited) return rateLimited;
 
-  const { data, error } = await validateBody(request, UpdateWalletSchema);
-  if (error) return error;
+  const { data, error: validationError } = await validateBody(request, UpdateWalletSchema);
+  if (validationError) return validationError;
 
   if (!isValidStellarAddress(data.walletAddress)) {
     return NextResponse.json({ error: 'Invalid Stellar wallet address' }, { status: 400 });
@@ -32,7 +31,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, user }, { status: 200 });
   } catch (err) {
-    console.error('Update wallet error:', err);
+    logger.error('Update wallet error', { err, userId: payload.userId });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

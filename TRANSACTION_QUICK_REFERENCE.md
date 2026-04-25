@@ -91,8 +91,10 @@ const { submitTransaction } = useTransactionSubmit({
 ### Button with Status
 
 ```typescript
-<Button disabled={!isConnected || isSubmitting}>
-  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+<Button 
+  disabled={!isConnected} 
+  isLoading={isSubmitting}
+>
   {status === 'signing' && 'Waiting for signature...'}
   {status === 'submitting' && 'Submitting...'}
   {status === 'polling' && 'Confirming...'}

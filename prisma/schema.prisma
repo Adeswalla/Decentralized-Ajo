@@ -13,11 +13,13 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String
+  password  String?
+  address   String   @unique
   
   // Wallet info
   walletAddress String? @unique
   nonce         String?
+  nonceExpiresAt DateTime?
   isWalletVerified Boolean @default(false)
   
   firstName String?
@@ -30,6 +32,7 @@ model User {
   profilePicture String?
   bio       String?
   verified  Boolean  @default(false)
+  emailVerifiedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -41,6 +44,37 @@ model User {
   withdrawals Withdrawal[]
   refreshTokens RefreshToken[]
   notifications Notification[]
+  deadlineReminders DeadlineReminder[]
+  verificationTokens VerificationToken[]
+  
+  // New Ajo Group Relations
+  ajos          UserAjo[]
+  ajoParticipations UserAjoParticipation[]
+  settings      UserSettings?
+  activityLogs  ActivityLog[]
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailAddress       String?
+  receiveEmailNotifs Boolean  @default(true)
+  showPnlPublicly    Boolean  @default(false)
+  theme              String   @default("light")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model RefreshToken {
@@ -49,8 +83,11 @@ model RefreshToken {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
+  rotatedAt DateTime?
+  familyId  String   @default(cuid())
 
   @@index([userId])
+  @@index([familyId])
 }
 
 model Circle {
@@ -70,8 +107,10 @@ model Circle {
   // Blockchain
   contractAddress String?
   contractDeployed Boolean @default(false)
+  onChainId String?
   
   // Metadata
+  expectedEndDate DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -81,9 +120,12 @@ model Circle {
   payments  PaymentSchedule[]
   governance GovernanceProposal[]
   withdrawals Withdrawal[]
+  ajoParticipants UserAjoParticipation[] @relation("ajoParticipants")
+  deadlineReminders DeadlineReminder[]
 
   @@index([organizerId])
   @@index([status])
+  @@index([organizerId, status])
 }
 
 enum CircleStatus {
@@ -91,6 +133,7 @@ enum CircleStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  ACTION_REQUIRED
 }
 
 model CircleMember {
@@ -110,11 +153,11 @@ model CircleMember {
   // Tracking
   joinedAt DateTime @default(now())
   leftAt   DateTime?
-  
   @@unique([circleId, userId])
   @@index([circleId])
   @@index([userId])
   @@index([status])
+  @@index([userId, status])
 }
 
 enum MemberStatus {
@@ -143,8 +186,10 @@ model Contribution {
 
   @@index([circleId])
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([status])
   @@index([circleId, status])
+  @@index([userId, status])
 }
 
 enum ContributionStatus {
@@ -166,7 +211,6 @@ model PaymentSchedule {
   
   status    PaymentStatus @default(PENDING)
   paidAt    DateTime?
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -260,12 +304,10 @@ model Withdrawal {
   requestedAmount Float // Amount requested before penalty
   penaltyPercentage Float @default(10)
   reason    String?
-  
   status    WithdrawalStatus @default(PENDING)
   
   // Blockchain
   txHash    String?
-  
   createdAt DateTime @default(now())
   approvedAt DateTime?
   completedAt DateTime?
@@ -274,6 +316,7 @@ model Withdrawal {
   @@index([userId])
   @@index([status])
   @@index([circleId, status])
+  @@index([userId, status])
 }
 
 enum WithdrawalStatus {
@@ -291,6 +334,37 @@ model Session {
   expiresAt DateTime
   
   createdAt DateTime @default(now())
+}
+
+/// Off-chain participation record for Ajo groups (many-to-many: User <-> Circle).
+/// Mirrors on-chain membership events for consistency.
+model UserAjoParticipation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ajoId     String
+  ajo       Circle   @relation("ajoParticipants", fields: [ajoId], references: [id], onDelete: Cascade)
+
+  status    AjoParticipationStatus @default(PENDING)
+
+  /// Set when the join is confirmed on-chain (tx hash from the blockchain event)
+  onChainTxHash String?
+  /// Timestamp of the on-chain confirmation
+  confirmedAt   DateTime?
+
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  @@unique([userId, ajoId])
+  @@index([userId])
+  @@index([ajoId])
+  @@index([status])
+}
+
+enum AjoParticipationStatus {
+  PENDING    // joined off-chain, awaiting on-chain confirmation
+  CONFIRMED  // confirmed by on-chain event
+  EXITED     // user left the group
 }
 
 model Notification {
@@ -313,6 +387,23 @@ model Notification {
   @@index([userId, read])
 }
 
+model DeadlineReminder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  circleId  String
+  circle    Circle   @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  round     Int
+  leadTimeHours Int
+  notifiedAt DateTime @default(now())
+
+  @@unique([userId, circleId, round, leadTimeHours])
+  @@index([userId])
+  @@index([circleId])
+  @@index([circleId, round])
+}
+
 enum NotificationType {
   CONTRIBUTION_REMINDER
   PAYOUT_TURN
@@ -322,4 +413,49 @@ enum NotificationType {
   PROPOSAL_RESULT
   CIRCLE_DISSOLVED
   GENERAL
+}
+
+// ==========================================
+// NEW AJO GROUP MODELS (Issue #102)
+// ==========================================
+
+model AjoGroup {
+  id              String    @id @default(uuid())
+  contractAddress String    @unique
+  name            String
+  contributionAmt String    // Stored as string to match uint256 from smart contract
+  cycleDuration   Int       // Duration in days
+  maxMembers      Int
+  status          String    @default("OPEN")
+  createdAt       DateTime  @default(now())
+  
+  members         UserAjo[]
+  
+  @@index([contractAddress])
+  @@index([status])
+}
+
+model UserAjo {
+  userAddress String
+  ajoId       String
+  
+  user        User     @relation(fields: [userAddress], references: [address], onDelete: Cascade)
+  ajo         AjoGroup @relation(fields: [ajoId], references: [id], onDelete: Cascade)
+  
+  @@id([userAddress, ajoId])
+  @@index([userAddress])
+  @@index([ajoId])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String
+  description String?
+  metadata    String?  // JSON string for extra context (circleId, amount, etc.)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
 }

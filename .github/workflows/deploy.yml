@@ -6,29 +6,28 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  test-contract:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
+        uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "pnpm"
 
       - name: Install Dependencies
         run: pnpm install
 
       - name: Rust toolchain (matches contracts/ajo-circle/rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@1.76.0
+        uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.85.0
           targets: wasm32-unknown-unknown
 
       - name: Build & unit-test Soroban contract
@@ -37,14 +36,56 @@ jobs:
           cargo build --target wasm32-unknown-unknown --release
           cargo test --lib
 
+  lint-and-build:
+    runs-on: ubuntu-latest
+    needs: [test-contract]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install Dependencies
+        run: pnpm install
+
       - name: Prisma Generate
         run: pnpm prisma generate
 
       - name: Next.js build
         env:
-          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
-          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars-long
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+          NEXT_PUBLIC_STELLAR_HORIZON_URL: https://horizon-testnet.stellar.org
+          NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: pnpm build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint-and-build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install Dependencies
+        run: pnpm install
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v20

@@ -11,6 +11,7 @@ Complete guide to all documentation for the Stellar Ajo project.
 | [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) | Detailed project overview | 10 min |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | Development workflow and debugging | 20 min |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Production deployment guide | 20 min |
+| [TRANSACTION_HISTORY.md](./docs/TRANSACTION_HISTORY.md) | Transaction history system guide | 10 min |
 
 ## Start Here
 
@@ -41,6 +42,7 @@ Follow **[DEPLOYMENT.md](./DEPLOYMENT.md)** for production deployment steps.
 ### Development
 - **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Dev workflow, testing, debugging
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Production deployment
+- **[TRANSACTION_HISTORY.md](./docs/TRANSACTION_HISTORY.md)** - Transaction history system guide
 
 ### Code Documentation
 - Smart contract comments in `contracts/ajo-circle/src/lib.rs`

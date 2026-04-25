@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
-import { validateBody, applyRateLimit } from '@/lib/api-helpers';
+import { validateBody, applyRateLimit, validateId } from '@/lib/api-helpers';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { createChildLogger } from '@/lib/logger';
 
 const InviteSchema = z.object({
   email: z.string().email('Invalid email address'),
 });
+const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]/admin/invite' });
 
 export async function POST(
   request: NextRequest,
@@ -19,7 +21,7 @@ export async function POST(
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
 
-  const rateLimited = applyRateLimit(request, RATE_LIMITS.api, 'circles:admin:invite', payload.userId);
+  const rateLimited = await applyRateLimit(request, RATE_LIMITS.sensitive, 'circles:admin-invite', payload.userId);
   if (rateLimited) return rateLimited;
 
   const validated = await validateBody(request, InviteSchema);
@@ -28,6 +30,8 @@ export async function POST(
 
   try {
     const { id: circleId } = await params;
+    const idError = validateId(request, circleId);
+    if (idError) return idError;
 
     // Verify circle exists and user is organizer
     const circle = await prisma.circle.findUnique({
@@ -77,7 +81,7 @@ export async function POST(
       { status: 200 }
     );
   } catch (err) {
-    console.error('Invite member error:', err);
+    logger.error('Invite member error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

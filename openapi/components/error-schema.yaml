@@ -1,0 +1,22 @@
+openapi: 3.0.3
+components:
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        code:
+          type: string
+          description: "Machine-readable error code"
+        message:
+          type: string
+          description: "Human-friendly error message"
+        details:
+          description: "Optional additional structured details about the error"
+          nullable: true
+        requestId:
+          type: string
+          nullable: true
+          description: "Correlation id for the request, present when available"
+      required:
+        - code
+        - message

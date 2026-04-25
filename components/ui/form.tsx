@@ -3,6 +3,7 @@
 import * as React from 'react'
 import * as LabelPrimitive from '@radix-ui/react-label'
 import { Slot } from '@radix-ui/react-slot'
+import { AlertCircle } from 'lucide-react'
 import {
   Controller,
   FormProvider,
@@ -147,10 +148,16 @@ function FormMessage({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="form-message"
       id={formMessageId}
-      className={cn('text-destructive text-sm', className)}
+      role="alert"
+      aria-live="polite"
+      className={cn(
+        'mt-1.5 flex items-center gap-1.5 text-sm font-medium text-destructive',
+        className,
+      )}
       {...props}
     >
-      {body}
+      <AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />
+      <span>{body}</span>
     </p>
   )
 }

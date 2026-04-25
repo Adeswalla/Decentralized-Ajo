@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, ShieldCheck, Filter } from 'lucide-react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import { authenticatedFetch } from '@/lib/auth-client';
 import { useWallet } from '@/lib/wallet-context';
 import { ProposalCard } from '@/components/governance/proposal-card';
 import { CreateProposalDialog } from '@/components/governance/create-proposal-dialog';
+import { GovernanceSkeleton } from '@/components/skeletons';
 
 type StatusFilter = 'ALL' | 'ACTIVE' | 'PASSED' | 'REJECTED';
 
@@ -33,53 +35,47 @@ interface Proposal {
   quorumPercentage: number;
 }
 
+const fetcher = async (url: string) => {
+  const res = await authenticatedFetch(url);
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Unauthorized');
+    if (res.status === 403) throw new Error('Forbidden');
+    throw new Error('Failed to fetch');
+  }
+  return res.json();
+};
+
 export default function GovernancePage() {
   const router = useRouter();
   const params = useParams();
   const circleId = params.id as string;
   const { isConnected } = useWallet();
 
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
 
-  const fetchProposals = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const response = await authenticatedFetch(`/api/circles/${circleId}/governance`);
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/auth/login');
-          return;
-        }
-        if (response.status === 403) {
-          toast.error('You do not have access to this circle');
-          router.push('/');
-          return;
-        }
-        toast.error('Failed to load proposals');
-        return;
-      }
-
-      const data = await response.json();
-      setProposals(data.proposals);
-    } catch (error) {
-      console.error('Error fetching proposals:', error);
-      toast.error('Failed to load proposals');
-    } finally {
-      setLoading(false);
+  const { data, mutate, error, isLoading } = useSWR(
+    circleId ? `/api/circles/${circleId}/governance` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
     }
-  }, [circleId, router]);
+  );
+
+  const proposals = useMemo(() => data?.proposals || [], [data]);
 
   useEffect(() => {
-    fetchProposals();
-  }, [fetchProposals]);
+    if (error) {
+      if (error.message === 'Unauthorized') {
+        router.push('/auth/login');
+      } else if (error.message === 'Forbidden') {
+        toast.error('You do not have access to this circle');
+        router.push('/');
+      } else {
+        toast.error('Failed to load proposals');
+      }
+    }
+  }, [error, router]);
 
   const handleCreateProposal = async (data: {
     title: string;
@@ -88,46 +84,89 @@ export default function GovernancePage() {
     votingEndDate: string;
     requiredQuorum: number;
   }) => {
-    const response = await authenticatedFetch(`/api/circles/${circleId}/governance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    try {
+      const response = await authenticatedFetch(`/api/circles/${circleId}/governance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to create proposal');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create proposal');
+      }
+
+      toast.success('Proposal created successfully!');
+      mutate();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create proposal');
     }
-
-    toast.success('Proposal created successfully!');
-    fetchProposals();
   };
 
   const handleVote = async (proposalId: string, voteChoice: string) => {
-    const response = await authenticatedFetch(
-      `/api/circles/${circleId}/governance/${proposalId}/vote`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voteChoice }),
-      },
-    );
+    const originalProposals = proposals;
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      toast.error(errorData.error || 'Failed to cast vote');
-      return;
+    // 1. Optimistic update
+    const updatedProposals = proposals.map((p: Proposal) => {
+      if (p.id === proposalId) {
+        const isNewVote = !p.userVote;
+        const yesChange = voteChoice === 'YES' ? 1 : (p.userVote === 'YES' ? -1 : 0);
+        const noChange = voteChoice === 'NO' ? 1 : (p.userVote === 'NO' ? -1 : 0);
+        const abstainChange = voteChoice === 'ABSTAIN' ? 1 : (p.userVote === 'ABSTAIN' ? -1 : 0);
+        const totalChange = isNewVote ? 1 : 0;
+
+        const newTotalVotes = p.totalVotes + totalChange;
+
+        return {
+          ...p,
+          userVote: voteChoice,
+          yesVotes: p.yesVotes + yesChange,
+          noVotes: p.noVotes + noChange,
+          abstainVotes: p.abstainVotes + abstainChange,
+          totalVotes: newTotalVotes,
+          quorumPercentage: p.totalMembers > 0
+            ? Math.round((newTotalVotes / p.totalMembers) * 100)
+            : 0,
+        };
+      }
+      return p;
+    });
+
+    // Apply optimistic update
+    mutate({ ...data, proposals: updatedProposals }, false);
+
+    try {
+      // 2. Server request
+      const response = await authenticatedFetch(
+        `/api/circles/${circleId}/governance/${proposalId}/vote`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voteChoice }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to cast vote');
+      }
+
+      // 3. Server confirms - revalidate
+      await mutate();
+      toast.success('Vote cast successfully!');
+    } catch (err: any) {
+      // 4. Rollback on error
+      mutate({ ...data, proposals: originalProposals }, false);
+      toast.error(err.message || 'Failed to cast vote');
     }
-
-    toast.success('Vote cast successfully!');
-    fetchProposals();
   };
 
-  const filteredProposals = proposals.filter((p) =>
+  const filteredProposals = proposals.filter((p: Proposal) =>
     statusFilter === 'ALL' ? true : p.status === statusFilter,
   );
 
-  const activeCount = proposals.filter((p) => p.status === 'ACTIVE').length;
+  const activeCount = proposals.filter((p: Proposal) => p.status === 'ACTIVE').length;
+
 
   const FILTERS: { value: StatusFilter; label: string }[] = [
     { value: 'ALL', label: 'All' },
@@ -136,14 +175,8 @@ export default function GovernancePage() {
     { value: 'REJECTED', label: 'Rejected' },
   ];
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-12 text-center">
-          <p className="text-muted-foreground">Loading governance proposals...</p>
-        </div>
-      </main>
-    );
+  if (isLoading) {
+    return <GovernanceSkeleton />;
   }
 
   return (
@@ -191,7 +224,7 @@ export default function GovernancePage() {
               {filter.label}
               {filter.value !== 'ALL' && (
                 <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">
-                  {proposals.filter((p) =>
+                  {proposals.filter((p: Proposal) =>
                     filter.value === 'ALL' ? true : p.status === filter.value,
                   ).length}
                 </Badge>
@@ -217,7 +250,7 @@ export default function GovernancePage() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProposals.map((proposal) => (
+            {filteredProposals.map((proposal: Proposal) => (
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}

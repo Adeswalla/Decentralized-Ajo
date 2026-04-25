@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { formatXLM, formatDate } from '@/lib/utils';
 import { ArrowUpCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { NoContributionsEmpty } from '@/components/ui/empty-states';
 
 interface Contribution {
   id: string;
@@ -61,10 +62,7 @@ export function ContributionHistory({ contributions }: ContributionHistoryProps)
       </CardHeader>
       <CardContent>
         {contributions.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <ArrowUpCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No contributions yet</p>
-          </div>
+          <NoContributionsEmpty />
         ) : (
           <div className="space-y-4">
             {contributions.map((contribution, index) => {

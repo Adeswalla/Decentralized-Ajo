@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { formatAmount } from '@/lib/utils';
 
 export default function CreateCirclePage() {
   const router = useRouter();
@@ -154,9 +155,10 @@ export default function CreateCirclePage() {
                   placeholder="e.g., Office Savings Circle"
                   value={formData.name}
                   onChange={handleChange}
-                  className={errors.name ? 'border-destructive' : ''}
+                  aria-invalid={!!errors.name}
+                  aria-describedby={errors.name ? 'name-error' : undefined}
                 />
-                {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                {errors.name && <p id="name-error" role="alert" className="text-sm text-destructive">{errors.name}</p>}
               </div>
 
               {/* Description */}
@@ -187,10 +189,11 @@ export default function CreateCirclePage() {
                     placeholder="e.g., 100"
                     value={formData.contributionAmount}
                     onChange={handleChange}
-                    className={errors.contributionAmount ? 'border-destructive' : ''}
+                    aria-invalid={!!errors.contributionAmount}
+                    aria-describedby={errors.contributionAmount ? 'contributionAmount-error' : undefined}
                   />
                   {errors.contributionAmount && (
-                    <p className="text-sm text-destructive">{errors.contributionAmount}</p>
+                    <p id="contributionAmount-error" role="alert" className="text-sm text-destructive">{errors.contributionAmount}</p>
                   )}
                 </div>
 
@@ -206,10 +209,11 @@ export default function CreateCirclePage() {
                     placeholder="e.g., 7"
                     value={formData.contributionFrequencyDays}
                     onChange={handleChange}
-                    className={errors.contributionFrequencyDays ? 'border-destructive' : ''}
+                    aria-invalid={!!errors.contributionFrequencyDays}
+                    aria-describedby={errors.contributionFrequencyDays ? 'contributionFrequencyDays-error' : undefined}
                   />
                   {errors.contributionFrequencyDays && (
-                    <p className="text-sm text-destructive">
+                    <p id="contributionFrequencyDays-error" role="alert" className="text-sm text-destructive">
                       {errors.contributionFrequencyDays}
                     </p>
                   )}
@@ -226,9 +230,10 @@ export default function CreateCirclePage() {
                   placeholder="e.g., 12"
                   value={formData.maxRounds}
                   onChange={handleChange}
-                  className={errors.maxRounds ? 'border-destructive' : ''}
+                  aria-invalid={!!errors.maxRounds}
+                  aria-describedby={errors.maxRounds ? 'maxRounds-error' : undefined}
                 />
-                {errors.maxRounds && <p className="text-sm text-destructive">{errors.maxRounds}</p>}
+                {errors.maxRounds && <p id="maxRounds-error" role="alert" className="text-sm text-destructive">{errors.maxRounds}</p>}
                 <p className="text-xs text-muted-foreground mt-1">
                   Each round, one member receives the total pooled amount
                 </p>
@@ -248,7 +253,7 @@ export default function CreateCirclePage() {
                     <span className="text-muted-foreground">Payout Per Round:</span>{' '}
                     <span className="font-semibold">
                       {formData.contributionAmount && formData.maxRounds
-                        ? `${(parseFloat(formData.contributionAmount) * parseInt(formData.maxRounds)).toFixed(2)} XLM`
+                        ? `${formatAmount(parseFloat(formData.contributionAmount) * parseInt(formData.maxRounds))} XLM`
                         : '-'}
                     </span>
                   </p>
