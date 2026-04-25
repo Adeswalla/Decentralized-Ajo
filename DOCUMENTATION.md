@@ -216,7 +216,11 @@ All endpoints documented in [README.md#api-documentation](./README.md#api-docume
 - POST `/api/circles/:id/contribute`
 
 ### Users
-- PATCH `/api/users/update-wallet`
+- PATCH `/api/users/update-wallet` - Update wallet address (simple, no signature required)
+- GET `/api/auth/wallet/nonce` - Request a one-time challenge nonce
+- POST `/api/auth/wallet/verify` - Verify wallet ownership via Ed25519 signature
+
+See [docs/wallet-update-security.md](./docs/wallet-update-security.md) for the full security guide.
 
 ## Smart Contract Reference
 
@@ -253,6 +257,7 @@ Full details in [DEPLOYMENT.md](./DEPLOYMENT.md)
 - Database errors → [DEVELOPMENT.md](./DEVELOPMENT.md)
 - Module not found → [DEVELOPMENT.md](./DEVELOPMENT.md)
 - Wallet issues → [README.md](./README.md)
+- Wallet update security → [docs/wallet-update-security.md](./docs/wallet-update-security.md)
 - Contract deployment → [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ## Getting Help
