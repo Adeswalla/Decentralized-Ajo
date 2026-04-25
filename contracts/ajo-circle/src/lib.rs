@@ -543,6 +543,19 @@ impl AjoCircle {
             env.storage().instance().set(&DataKey::CycleWithdrawals, &vote);
         }
 
+        // Also update member status to Exited (2)
+        let mut members: Map<Address, MemberData> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Members)
+            .ok_or(AjoError::NotFound)?;
+
+        if let Some(mut member_data) = members.get(member.clone()) {
+            member_data.status = 2; // Exited
+            members.set(member.clone(), member_data);
+            env.storage().instance().set(&DataKey::Members, &members);
+        }
+
         env.events().publish(
             (symbol_short!("vote_cast"), member.clone(), env.current_contract_address()),
             (1u32, vote.votes_for) // 1 = YES

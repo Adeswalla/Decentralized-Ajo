@@ -35,12 +35,13 @@ impl AjoFactory {
         let registry_len = registry.len();
         let mut salt_bytes = [0u8; 32];
         let len_bytes = registry_len.to_be_bytes();
-        let start = 32 - len_bytes.len();
+        let start = 32_usize.checked_sub(len_bytes.len()).ok_or(AjoError::ArithmeticOverflow)?;
 
         let mut i = 0;
         while i < len_bytes.len() {
-            salt_bytes[start + i] = len_bytes[i];
-            i += 1;
+            let idx = start.checked_add(i).ok_or(AjoError::ArithmeticOverflow)?;
+            salt_bytes[idx] = len_bytes[i];
+            i = i.checked_add(1).ok_or(AjoError::ArithmeticOverflow)?;
         }
 
         let salt = BytesN::from_array(&env, &salt_bytes);
