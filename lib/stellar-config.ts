@@ -88,8 +88,12 @@ export const getNetworkConfig = () => {
   };
 };
 
-// Validate Stellar address
+// Federated address format: user*domain.com
+const FEDERATED_ADDRESS_REGEX = /^[^*\s]+\*[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Validate Stellar address (G... public key or user*domain.com federated address)
 export const isValidStellarAddress = (address: string): boolean => {
+  if (FEDERATED_ADDRESS_REGEX.test(address)) return true;
   try {
     StellarSdk.StrKey.decodeEd25519PublicKey(address);
     return true;
