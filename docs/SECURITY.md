@@ -3,6 +3,7 @@
 ## Authentication Security
 
 ### Password Hashing
+
 Passwords are hashed using `bcryptjs` with a salt factor of 10 before storage. Plain-text passwords are never stored or logged.
 
 ```typescript
@@ -12,12 +13,14 @@ return bcrypt.hash(password, salt);
 ```
 
 ### JWT Access Tokens
+
 - Signed with HS256 using `JWT_SECRET`
 - Expire after 1 hour
 - Payload contains `userId`, `email`, and optionally `walletAddress`
 - Extracted from the `Authorization: Bearer` header on every protected request
 
 ### Refresh Token Security
+
 - Stored in the database as UUID strings (not JWTs)
 - Sent as an **HttpOnly**, **Secure** (production), **SameSite=Lax** cookie — inaccessible to JavaScript
 - 30-day expiry
@@ -25,6 +28,7 @@ return bcrypt.hash(password, salt);
 - All tokens for a user are revoked on logout via `revokeUserRefreshTokens`
 
 ### Wallet Signature Verification
+
 - Uses Ed25519 cryptography via `@stellar/stellar-sdk`
 - Nonce is a UUID generated server-side and stored in the database
 - Nonce is nullified immediately after successful verification (**single-use**)
@@ -33,6 +37,7 @@ return bcrypt.hash(password, salt);
 ## API Security
 
 ### Rate Limiting
+
 All endpoints are rate-limited using an in-memory sliding-window limiter:
 
 - **Auth endpoints**: 10 requests per minute per IP/user
@@ -42,22 +47,28 @@ All endpoints are rate-limited using an in-memory sliding-window limiter:
 **Production note**: The current rate limiter is in-memory and does not share state across multiple server instances. For multi-instance deployments, replace with a Redis-backed limiter (e.g., Upstash).
 
 ### Input Validation
+
 Every API route validates request bodies using Zod schemas before processing. Invalid requests return `400 Validation failed` with field-level error details. This prevents malformed data from reaching the database.
 
 ### Authorization Checks
+
 Every protected route:
+
 1. Extracts and verifies the JWT
 2. Checks that the authenticated user has permission for the specific resource (e.g., must be a circle member to contribute, must be the organizer to add members)
 
 ### Request Tracing
+
 Every request is assigned a UUID `x-request-id` by the middleware. This ID is attached to both the request and response headers, enabling log correlation for debugging.
 
 ## Database Security
 
 ### Cascade Deletes
+
 All foreign keys use `onDelete: Cascade`. Deleting a user removes all their circles, contributions, votes, and tokens. Deleting a circle removes all its members, contributions, and proposals.
 
 ### Sensitive Field Exclusion
+
 API responses never include the `password` field. Prisma select statements explicitly exclude it:
 
 ```typescript
@@ -66,42 +77,54 @@ select: { id: true, email: true, firstName: true, lastName: true }
 ```
 
 ### Database Indexes
+
 Performance indexes are defined on all foreign keys and frequently filtered fields (`status`, `circleId`, `userId`) to prevent slow queries that could be exploited for denial-of-service.
 
 ## Smart Contract Security
 
 ### Authorization
+
 Every state-changing function requires `address.require_auth()` — the Soroban SDK enforces that the transaction is signed by the correct account.
 
 ### Overflow Protection
+
 Arithmetic uses `checked_add` and `checked_sub` where applicable to prevent integer overflow.
 
 ### Capacity Limits
+
 - Default max members: 50
 - Hard cap: 100 (enforced at contract level, not just application level)
 
+### Front-running Protection (Anti-MEV)
+
+- **Commit-Reveal Scheme**: Contributions use a two-phase process (Commit and Reveal) to prevent bots from observing transaction details in the mempool and displacing legitimate member actions.
+- **Non-deterministic Payouts**: The shuffle rotation uses a seed derived from ledger sequence number and transaction hashes, making it difficult for front-runners to predict and manipulate payout positions.
+
 ### Emergency Halt
+
 The organizer can call `panic()` to immediately freeze all operations. This is a last-resort mechanism for critical bugs or exploits.
 
 ### Penalty Enforcement
+
 Partial withdrawals enforce a 10% penalty at the contract level — it cannot be bypassed by calling the API directly.
 
 ### Static Analysis / Formal Methods Evaluation (Issue #350)
+
 - Decision record: `contracts/ajo-circle/adr/0001-static-analysis-formal-methods-evaluation.md`
 - Security review tracker: GitHub issue #342 (`[Contracts] External security review prep`)
 - Current decision: adopt `cargo clippy` as an automated baseline check now; defer Kani/MIRAI rollout until toolchain support for Soroban targets is more mature.
 
 ## Known Limitations and Risks
 
-| Risk | Severity | Notes |
-|------|----------|-------|
-| In-memory rate limiter | Medium | Does not work across multiple server instances. Replace with Redis for production |
-| No email verification | Medium | Users can register with any email address. Email verification flow is not yet implemented |
-| JWT stored in localStorage | Medium | Vulnerable to XSS. Consider moving to memory storage or HttpOnly cookies |
-| No CSRF protection | Low | SameSite=Lax on the refresh token cookie provides partial protection |
-| Smart contract not audited | **High** | Must be professionally audited before mainnet deployment |
-| No contract upgrade mechanism | Medium | Contract cannot be upgraded after deployment. Bugs require redeployment and migration |
-| Shuffle uses ledger sequence | Low | Rotation shuffle seed is predictable by validators. Acceptable for savings circles but not for high-stakes randomness |
+| Risk                          | Severity | Notes                                                                                                                 |
+| ----------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| In-memory rate limiter        | Medium   | Does not work across multiple server instances. Replace with Redis for production                                     |
+| No email verification         | Medium   | Users can register with any email address. Email verification flow is not yet implemented                             |
+| JWT stored in localStorage    | Medium   | Vulnerable to XSS. Consider moving to memory storage or HttpOnly cookies                                              |
+| No CSRF protection            | Low      | SameSite=Lax on the refresh token cookie provides partial protection                                                  |
+| Smart contract not audited    | **High** | Must be professionally audited before mainnet deployment                                                              |
+| No contract upgrade mechanism | Medium   | Contract cannot be upgraded after deployment. Bugs require redeployment and migration                                 |
+| Shuffle uses ledger sequence  | Low      | Rotation shuffle seed is predictable by validators. Acceptable for savings circles but not for high-stakes randomness |
 
 ## Pre-Mainnet Security Checklist
 
@@ -129,4 +152,3 @@ Partial withdrawals enforce a 10% penalty at the contract level — it cannot be
 - Steps to reproduce
 - Potential impact
 - Any suggested fix
-
