@@ -6,7 +6,19 @@ const config: Config.InitialOptions = {
     {
       displayName: 'ui',
       testMatch: ['<rootDir>/components/**/*.test.[jt]s?(x)', '<rootDir>/app/**/*.test.[jt]s?(x)'],
-      transform: { '^.+\\.[tj]sx?$': 'ts-jest' },
+      transform: {
+        '^.+\\.[tj]sx?$': [
+          'ts-jest',
+          {
+            tsconfig: {
+              jsx: 'react-jsx',
+              module: 'CommonJS',
+              moduleResolution: 'node',
+              esModuleInterop: true,
+            },
+          },
+        ],
+      },
       testEnvironment: 'jest-environment-jsdom',
       setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
       moduleNameMapper: {

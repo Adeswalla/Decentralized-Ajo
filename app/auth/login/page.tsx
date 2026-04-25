@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input, InputError } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CircleDot } from 'lucide-react';
 import { toast } from 'sonner';
@@ -126,7 +126,7 @@ export default function LoginPage() {
                   aria-invalid={!!errors.email}
                   aria-describedby={errors.email ? 'email-error' : undefined}
                 />
-                {errors.email && <p id="email-error" role="alert" className="text-sm text-destructive">{errors.email}</p>}
+                {errors.email && <InputError id="email-error" message={errors.email} />}
               </div>
 
               <div className="space-y-2">
@@ -141,7 +141,7 @@ export default function LoginPage() {
                   aria-invalid={!!errors.password}
                   aria-describedby={errors.password ? 'password-error' : undefined}
                 />
-                {errors.password && <p id="password-error" role="alert" className="text-sm text-destructive">{errors.password}</p>}
+                {errors.password && <InputError id="password-error" message={errors.password} />}
               </div>
 
               <Button type="submit" className="w-full" isLoading={loading}>
