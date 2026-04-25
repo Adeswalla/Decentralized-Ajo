@@ -51,6 +51,7 @@ model User {
   ajos          UserAjo[]
   ajoParticipations UserAjoParticipation[]
   settings      UserSettings?
+  activityLogs  ActivityLog[]
 }
 
 model VerificationToken {
@@ -444,4 +445,17 @@ model UserAjo {
   @@id([userAddress, ajoId])
   @@index([userAddress])
   @@index([ajoId])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String
+  description String?
+  metadata    String?  // JSON string for extra context (circleId, amount, etc.)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
 }
