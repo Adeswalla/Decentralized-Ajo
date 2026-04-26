@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Vec};
 
 use crate::{AjoCircleClient, AjoError};
 

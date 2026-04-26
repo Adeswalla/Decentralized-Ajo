@@ -29,14 +29,14 @@ use soroban_sdk::{
     Symbol, Vec, BytesN,
 };
 use crate::events::{
-    CircleInitEvent, MemberEvent, ContributionEvent, WithdrawalEvent,
+    CircleInitEvent, MemberEvent, ContributionEvent, ContributionPayload, WithdrawalEvent,
     PartialWithdrawalEvent, EmergencyRefundEvent, VoteEvent, DissolutionEvent,
-    StatusChangeEvent, RoleEvent, FeeConfigEvent,
+    StatusChangeEvent, RoleEvent, FeeConfigEvent, MemberRemovedEvent, CircleClosedEvent,
     emit_circle_initialized, emit_member_added, emit_contribution, emit_deposit,
     emit_payout, emit_partial_withdrawal, emit_emergency_refund,
     emit_dissolution_started, emit_dissolution_passed, emit_vote_cast,
     emit_panic, emit_resume, emit_role_granted, emit_role_revoked,
-    emit_fee_config, emit_status_change,
+    emit_fee_config, emit_status_change, emit_member_removed, emit_circle_closed,
 };
 
 
@@ -417,6 +417,73 @@ impl AjoCircle {
         Self::join_circle(env, organizer, new_member)
     }
 
+    /// Remove a member before the circle starts, refunding any contributions they have made.
+    /// Adjusts `member_count` (totalTarget) accordingly.
+    pub fn remove_member(env: Env, organizer: Address, member: Address) -> Result<(), AjoError> {
+        organizer.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let mut circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        if circle.organizer != organizer {
+            return Err(AjoError::Unauthorized);
+        }
+        // Organizer cannot remove themselves
+        if member == organizer {
+            return Err(AjoError::Unauthorized);
+        }
+        if !Self::member_exists(&env, &member) {
+            return Err(AjoError::NotFound);
+        }
+
+        let member_data = Self::load_member(&env, &member)?;
+
+        // Refund any pending contributions (total_contributed - total_withdrawn)
+        let refund = member_data.total_contributed - member_data.total_withdrawn;
+        if refund > 0 {
+            // Deduct from pool
+            let pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
+            env.storage()
+                .instance()
+                .set(&DataKey::TotalPool, &(pool.checked_sub(refund).ok_or(AjoError::ArithmeticOverflow)?));
+
+            let token_client = token::Client::new(&env, &circle.token_address);
+            token_client.transfer(&env.current_contract_address(), &member, &refund);
+        }
+
+        // Remove per-member storage entries
+        env.storage().instance().remove(&DataKey::Member(member.clone()));
+        env.storage().instance().remove(&DataKey::Standing(member.clone()));
+        env.storage().instance().remove(&DataKey::LastDeposit(member.clone()));
+        env.storage().instance().remove(&DataKey::KycVerified(member.clone()));
+
+        // Remove from the ordered member list
+        let old_list = Self::load_member_list(&env);
+        let mut new_list: Vec<Address> = Vec::new(&env);
+        for addr in old_list.iter() {
+            if addr != member {
+                new_list.push_back(addr);
+            }
+        }
+        env.storage().instance().set(&DataKey::Members, &new_list);
+
+        // Adjust member_count
+        circle.member_count = circle.member_count.saturating_sub(1);
+        env.storage().instance().set(&DataKey::Circle, &circle);
+
+        emit_member_removed(&env, &MemberRemovedEvent {
+            member: member.clone(),
+            refund_amount: refund,
+            timestamp: env.ledger().timestamp(),
+        });
+
+        Ok(())
+    }
+
     // ---------------- CONTRIBUTIONS ----------------
 
     pub fn contribute(env: Env, member: Address, amount: i128) -> Result<(), AjoError> {
@@ -659,6 +726,11 @@ impl AjoCircle {
     pub fn partial_withdraw(env: Env, member: Address) -> Result<i128, AjoError> {
         Self::require_not_paused(&env)?;
         member.require_auth();
+
+        // Verify caller is an actual circle member
+        if !Self::member_exists(&env, &member) {
+            return Err(AjoError::Unauthorized);
+        }
 
         let circle: CircleData = env
             .storage()
@@ -929,6 +1001,38 @@ impl AjoCircle {
         // Emit structured panic event (emergency)
         emit_panic(&env, &caller, env.ledger().timestamp());
         Ok(())
+    }
+
+    /// Close the circle: distribute any residual balance to the organizer (admin) and
+    /// mark the circle as Dissolved. Cleans up pool state so no funds are stranded.
+    pub fn close_circle(env: Env, admin: Address) -> Result<i128, AjoError> {
+        Self::require_admin(&env, &admin)?;
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        let residual: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
+
+        // Transfer any residual balance to the organizer/admin
+        if residual > 0 {
+            let token_client = token::Client::new(&env, &circle.token_address);
+            token_client.transfer(&env.current_contract_address(), &circle.organizer, &residual);
+        }
+
+        // Zero out the pool and mark circle as Dissolved
+        env.storage().instance().set(&DataKey::TotalPool, &0_i128);
+        env.storage().instance().set(&DataKey::CircleStatus, &CircleStatus::Dissolved);
+
+        emit_circle_closed(&env, &CircleClosedEvent {
+            closed_by: admin.clone(),
+            residual_distributed: residual,
+            timestamp: env.ledger().timestamp(),
+        });
+
+        Ok(residual)
     }
 
     // ---------------- ROLE MANAGEMENT ----------------
@@ -1302,6 +1406,27 @@ impl AjoCircle {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod inline_tests {
+    use super::*;
+    use soroban_sdk::{testutils::Address as _, token, Address, Env, Map};
+
+    fn setup_circle_with_member(env: &Env) -> (AjoCircleClient<'_>, Address, Address, Address) {
+        let contract_id = env.register_contract(None, AjoCircle);
+        let client = AjoCircleClient::new(env, &contract_id);
+        let admin = Address::generate(env);
+        let organizer = Address::generate(env);
+        let member = Address::generate(env);
+        let token_address = env.register_stellar_asset_contract(admin.clone());
+        let token_admin = token::StellarAssetClient::new(env, &token_address);
+        token_admin.mint(&organizer, &10_000_i128);
+        token_admin.mint(&member, &10_000_i128);
+        client.initialize_circle(&organizer, &token_address, &100_i128, &7_u32, &3_u32, &3_u32);
+        client.add_member(&organizer, &member);
+        (client, organizer, member, token_address)
+    }
+
     #[test]
     fn test_deposit_exact_contribution_updates_pool_and_timestamp() {
         let env = Env::default();

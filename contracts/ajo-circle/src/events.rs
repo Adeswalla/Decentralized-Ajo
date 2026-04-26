@@ -86,6 +86,17 @@ pub struct ContributionEvent {
     pub timestamp: u64,
 }
 
+/// Concise contribution payload — omits Address (already in topic) to avoid
+/// buffer-size failures for large contributions.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContributionPayload {
+    pub amount: i128,
+    pub round: u32,
+    pub total_contributed: i128,
+    pub timestamp: u64,
+}
+
 /// Withdrawal/payout event data
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -169,6 +180,24 @@ pub struct FeeConfigEvent {
     pub timestamp: u64,
 }
 
+/// Member removed event data
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemberRemovedEvent {
+    pub member: Address,
+    pub refund_amount: i128,
+    pub timestamp: u64,
+}
+
+/// Circle closed event data
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CircleClosedEvent {
+    pub closed_by: Address,
+    pub residual_distributed: i128,
+    pub timestamp: u64,
+}
+
 // ============================================================================
 // EVENT EMISSION HELPERS
 // ============================================================================
@@ -198,19 +227,29 @@ pub fn emit_member_added(env: &Env, data: &MemberEvent) {
     );
 }
 
-/// Emit contribution event
+/// Emit contribution event — member address is in the topic; payload is concise scalars only.
 pub fn emit_contribution(env: &Env, data: &ContributionEvent) {
     env.events().publish(
         (TOPIC_CONTRIBUTE, data.member.clone()),
-        data.clone(),
+        ContributionPayload {
+            amount: data.amount,
+            round: data.round,
+            total_contributed: data.total_contributed,
+            timestamp: data.timestamp,
+        },
     );
 }
 
-/// Emit deposit event
+/// Emit deposit event — member address is in the topic; payload is concise scalars only.
 pub fn emit_deposit(env: &Env, data: &ContributionEvent) {
     env.events().publish(
         (TOPIC_CONTRIBUTE, SUB_DEPOSIT, data.member.clone()),
-        data.clone(),
+        ContributionPayload {
+            amount: data.amount,
+            round: data.round,
+            total_contributed: data.total_contributed,
+            timestamp: data.timestamp,
+        },
     );
 }
 
@@ -298,6 +337,22 @@ pub fn emit_role_revoked(env: &Env, data: &RoleEvent) {
 pub fn emit_fee_config(env: &Env, data: &FeeConfigEvent) {
     env.events().publish(
         (TOPIC_FEE, SUB_SET, data.treasury.clone()),
+        data.clone(),
+    );
+}
+
+/// Emit member removed event
+pub fn emit_member_removed(env: &Env, data: &MemberRemovedEvent) {
+    env.events().publish(
+        (TOPIC_MEMBER, symbol_short!("remove"), data.member.clone()),
+        data.clone(),
+    );
+}
+
+/// Emit circle closed event
+pub fn emit_circle_closed(env: &Env, data: &CircleClosedEvent) {
+    env.events().publish(
+        (TOPIC_CIRCLE, symbol_short!("closed"), data.closed_by.clone()),
         data.clone(),
     );
 }
