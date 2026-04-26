@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { WalletButton } from "@/components/wallet-button";
 import { NetworkIndicator } from "@/components/wallet/network-indicator";
 import { NetworkMismatchModal } from "@/components/wallet/network-mismatch-modal";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeSelector } from "@/components/theme-selector";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import {
   DropdownMenu,
@@ -173,7 +173,7 @@ export function Navbar() {
           {/* Right-side actions */}
           <div className="flex items-center gap-2 ml-auto">
             <NotificationBell />
-            <ThemeToggle />
+            <ThemeSelector />
             <div className="hidden sm:flex items-center gap-2">
               <NetworkIndicator />
               <WalletButton />
