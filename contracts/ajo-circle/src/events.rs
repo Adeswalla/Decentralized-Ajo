@@ -169,6 +169,15 @@ pub struct FeeConfigEvent {
     pub timestamp: u64,
 }
 
+/// Member removed event data
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemberRemovedEvent {
+    pub member: Address,
+    pub refund_amount: i128,
+    pub timestamp: u64,
+}
+
 // ============================================================================
 // EVENT EMISSION HELPERS
 // ============================================================================
@@ -298,6 +307,14 @@ pub fn emit_role_revoked(env: &Env, data: &RoleEvent) {
 pub fn emit_fee_config(env: &Env, data: &FeeConfigEvent) {
     env.events().publish(
         (TOPIC_FEE, SUB_SET, data.treasury.clone()),
+        data.clone(),
+    );
+}
+
+/// Emit member removed event
+pub fn emit_member_removed(env: &Env, data: &MemberRemovedEvent) {
+    env.events().publish(
+        (TOPIC_MEMBER, symbol_short!("remove"), data.member.clone()),
         data.clone(),
     );
 }
