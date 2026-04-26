@@ -309,29 +309,32 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
      * @dev Contribute ETH to the circle
      * @param _circleId Circle ID
      */
-    function contributeETH(uint256 _circleId) 
-        external 
-        payable 
-        nonReentrant 
+    function contributeETH(uint256 _circleId)
+        external
+        payable
+        nonReentrant
         circleExists(_circleId)
         onlyCircleMember(_circleId)
         whenNotPaused
     {
-        Circle storage circle = circles[_circleId];
-        Member storage member = members[_circleId][msg.sender];
-        
-        require(circle.active, "Circle not active");
-        require(member.isActive, "Member not active");
-        
-        uint256 requiredAmount = getCurrentContributionAmount(_circleId);
+        // Cache config: Read circle and member data once into memory
+        Circle memory circleData = circles[_circleId];
+        Member memory memberData = members[_circleId][msg.sender];
+
+        require(circleData.active, "Circle not active");
+        require(memberData.isActive, "Member not active");
+
+        // Use cached contribution amount to avoid extra storage call
+        uint256 requiredAmount = usdToEth(circleData.contributionAmountUSD);
         require(msg.value == requiredAmount, "Incorrect ETH amount");
-        
-        member.totalContributed = member.totalContributed.add(msg.value);
-        member.missedContributions = 0; // Reset missed contributions
-        
+
+        // Update storage with new values
+        members[_circleId][msg.sender].totalContributed = memberData.totalContributed.add(msg.value);
+        members[_circleId][msg.sender].missedContributions = 0; // Reset missed contributions
+
         totalPool[_circleId] = totalPool[_circleId].add(msg.value);
-        
-        emit ContributionMade(_circleId, msg.sender, msg.value, circle.currentRound);
+
+        emit ContributionMade(_circleId, msg.sender, msg.value, circleData.currentRound);
     }
 
     /**
@@ -385,13 +388,14 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
         onlyCircleMember(_circleId)
         whenNotPaused
     {
-        Circle storage circle = circles[_circleId];
-        Member storage member = members[_circleId][msg.sender];
+        // Cache config: Read circle data once into memory
+        Circle memory circleData = circles[_circleId];
+        Member memory memberData = members[_circleId][msg.sender];
 
         // ── CHECKS ──────────────────────────────────────────────────────────
-        require(circle.active, "Circle not active");
-        require(!member.hasReceivedPayout, "Already received payout");
-        require(circleMembers[_circleId].length == circle.maxMembers, "Circle not full");
+        require(circleData.active, "Circle not active");
+        require(!memberData.hasReceivedPayout, "Already received payout");
+        require(circleMembers[_circleId].length == circleData.maxMembers, "Circle not full");
         require(
             payoutOrder[_circleId][currentPayoutIndex[_circleId]] == msg.sender,
             "Not your turn"
@@ -403,21 +407,34 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
         // ── EFFECTS ─────────────────────────────────────────────────────────
         // Zero the pool and record payout BEFORE any external call.
         totalPool[_circleId]          = 0;
-        member.hasReceivedPayout      = true;
-        member.totalWithdrawn         = member.totalWithdrawn.add(payoutAmount);
+        members[_circleId][msg.sender].hasReceivedPayout = true;
+        members[_circleId][msg.sender].totalWithdrawn = memberData.totalWithdrawn.add(payoutAmount);
         uint256 newIndex              = currentPayoutIndex[_circleId].add(1);
         currentPayoutIndex[_circleId] = newIndex;
 
         // Advance round if all members have been paid (still an effect, no call yet).
         if (newIndex >= circleMembers[_circleId].length) {
-            _nextRound(_circleId);
+            _nextRound(_circleId, circleData);
         }
 
         // ── INTERACTIONS ────────────────────────────────────────────────────
         (bool success, ) = payable(msg.sender).call{value: payoutAmount}("");
         require(success, "Transfer failed");
 
-        emit PayoutClaimed(_circleId, msg.sender, payoutAmount, circle.currentRound);
+        emit PayoutClaimed(_circleId, msg.sender, payoutAmount, circleData.currentRound);
+    }
+
+    // ---------------- Internal Helper Functions ----------------
+
+    /**
+     * @dev Internal function to check membership using direct storage access
+     * Used by functions that have already cached circle config
+     * @param _circleId Circle ID
+     * @param _member Address to check
+     * @return isMember True if member exists
+     */
+    function _isMemberCached(uint256 _circleId, address _member) internal view returns (bool) {
+        return members[_circleId][_member].memberAddress != address(0);
     }
 
     // ---------------- View Functions ----------------
@@ -630,30 +647,31 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev Move circle to next round
      * @param _circleId Circle ID
+     * @param _cachedCircle Cached circle data to minimize storage reads
      */
-    function _nextRound(uint256 _circleId) internal {
-        Circle storage circle = circles[_circleId];
-        
-        circle.currentRound++;
-        
+    function _nextRound(uint256 _circleId, Circle memory _cachedCircle) internal {
+        // Use cached values to update storage
+        uint16 nextRound = _cachedCircle.currentRound + 1;
+        circles[_circleId].currentRound = nextRound;
+
         // Reset payout status for all members
         for (uint256 i = 0; i < circleMembers[_circleId].length; i++) {
             members[_circleId][circleMembers[_circleId][i]].hasReceivedPayout = false;
         }
-        
+
         // Reset payout index
         currentPayoutIndex[_circleId] = 0;
-        
+
         // Generate new payout order
         payoutOrder[_circleId] = new address[](0);
         _initializePayoutOrder(_circleId);
-        
-        // Update round deadline
-        roundDeadline[_circleId] = block.timestamp + (circle.frequencyDays * 1 days);
-        
-        // Check if max rounds reached
-        if (circle.currentRound > circle.maxRounds) {
-            circle.active = false;
+
+        // Update round deadline using cached frequency
+        roundDeadline[_circleId] = block.timestamp + (_cachedCircle.frequencyDays * 1 days);
+
+        // Check if max rounds reached using cached values
+        if (nextRound > _cachedCircle.maxRounds) {
+            circles[_circleId].active = false;
         }
     }
 

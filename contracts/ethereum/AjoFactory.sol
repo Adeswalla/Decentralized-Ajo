@@ -211,29 +211,31 @@ contract AjoFactory {
         payable
         circleExists(_circleId)
     {
-        Circle storage circle = circles[_circleId];
+        // Cache config: Read circle data once into memory to minimize storage reads
+        Circle memory circleData = circles[_circleId];
 
         require(
-            circle.status == CircleStatus.ACTIVE,
+            circleData.status == CircleStatus.ACTIVE,
             "AjoFactory: Circle is not active"
         );
 
         require(
-            msg.value == circle.contributionAmount,
+            msg.value == circleData.contributionAmount,
             "AjoFactory: Incorrect contribution amount"
         );
 
-        // Verify the contributor is a member
+        // Verify the contributor is a member using cached member list
         bool isMember = false;
-        for (uint256 i = 0; i < circle.members.length; i++) {
-            if (circle.members[i] == msg.sender) {
+        for (uint256 i = 0; i < circleData.members.length; i++) {
+            if (circleData.members[i] == msg.sender) {
                 isMember = true;
                 break;
             }
         }
         require(isMember, "AjoFactory: Not a member of this circle");
 
-        circle.totalPooled += msg.value;
+        // Update storage with new pooled amount
+        circles[_circleId].totalPooled = circleData.totalPooled + msg.value;
 
         emit ContributionReceived(_circleId, msg.sender, msg.value);
     }
@@ -340,13 +342,15 @@ contract AjoFactory {
         circleExists(_circleId)
         onlyCircleCreator(_circleId)
     {
-        Circle storage circle = circles[_circleId];
+        // Cache config: Read circle status once into memory
+        CircleStatus currentStatus = circles[_circleId].status;
+
         require(
-            circle.status != CircleStatus.CANCELLED,
+            currentStatus != CircleStatus.CANCELLED,
             "AjoFactory: Circle already cancelled"
         );
 
-        circle.status = CircleStatus.CANCELLED;
+        circles[_circleId].status = CircleStatus.CANCELLED;
         emit CircleStatusChanged(_circleId, CircleStatus.CANCELLED);
     }
 
