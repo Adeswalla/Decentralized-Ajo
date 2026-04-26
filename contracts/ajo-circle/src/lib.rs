@@ -727,6 +727,11 @@ impl AjoCircle {
         Self::require_not_paused(&env)?;
         member.require_auth();
 
+        // Verify caller is an actual circle member
+        if !Self::member_exists(&env, &member) {
+            return Err(AjoError::Unauthorized);
+        }
+
         let circle: CircleData = env
             .storage()
             .instance()
