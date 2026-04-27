@@ -201,7 +201,11 @@ Check troubleshooting in [DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ## API Reference
 
-All endpoints documented in [README.md#api-documentation](./README.md#api-documentation)
+All endpoints require a `Bearer` token in the `Authorization` header unless noted otherwise.
+
+```
+Authorization: Bearer <jwt_token>
+```
 
 ### Authentication
 - POST `/api/auth/register`
@@ -221,6 +225,404 @@ All endpoints documented in [README.md#api-documentation](./README.md#api-docume
 - POST `/api/auth/wallet/verify` - Verify wallet ownership via Ed25519 signature
 
 See [docs/wallet-update-security.md](./docs/wallet-update-security.md) for the full security guide.
+
+---
+
+## Circles API — Usage Examples
+
+### List circles
+
+Returns all circles the authenticated user belongs to or organises. Supports pagination, filtering, and sorting.
+
+```bash
+# Basic — first page, 10 results
+curl https://api.example.com/api/circles \
+  -H "Authorization: Bearer <token>"
+
+# Paginated
+curl "https://api.example.com/api/circles?page=2&limit=20" \
+  -H "Authorization: Bearer <token>"
+
+# Filter by status and sort by size
+curl "https://api.example.com/api/circles?status=ACTIVE&sortBy=size_desc" \
+  -H "Authorization: Bearer <token>"
+
+# Search by name
+curl "https://api.example.com/api/circles?search=family" \
+  -H "Authorization: Bearer <token>"
+```
+
+Query parameters:
+
+| Parameter  | Values                                          | Default  |
+|------------|-------------------------------------------------|----------|
+| `page`     | integer ≥ 1                                     | `1`      |
+| `limit`    | 1–100                                           | `10`     |
+| `status`   | `ACTIVE` \| `PENDING` \| `COMPLETED` \| `PAUSED` | —        |
+| `duration` | `Weekly` \| `Monthly` \| `Quarterly`            | —        |
+| `sortBy`   | `newest` \| `size_desc` \| `size_asc` \| `name_asc` \| `name_desc` | `newest` |
+| `search`   | string                                          | —        |
+
+**Response**
+
+```json
+{
+  "data": [
+    {
+      "id": "clx1abc123",
+      "name": "Family Savings",
+      "contributionAmount": 5000,
+      "currentRound": 2,
+      "status": "ACTIVE",
+      "organizer": { "id": "usr_1", "firstName": "Ada", "lastName": "Obi" },
+      "members": [{ "user": { "id": "usr_1", "firstName": "Ada" } }],
+      "contributions": [{ "amount": 5000 }]
+    }
+  ],
+  "meta": { "total": 42, "pages": 5, "currentPage": 1 }
+}
+```
+
+---
+
+### Get a circle
+
+```bash
+curl https://api.example.com/api/circles/clx1abc123 \
+  -H "Authorization: Bearer <token>"
+```
+
+Returns full circle detail including members, contributions, and payments. Only accessible to members and the organiser.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "circle": {
+    "id": "clx1abc123",
+    "name": "Family Savings",
+    "contributionAmount": 5000,
+    "contributionFrequencyDays": 30,
+    "maxRounds": 12,
+    "currentRound": 2,
+    "status": "ACTIVE",
+    "organizer": { "id": "usr_1", "firstName": "Ada", "lastName": "Obi", "walletAddress": "G..." },
+    "members": [
+      {
+        "userId": "usr_1",
+        "rotationOrder": 1,
+        "totalContributed": 10000,
+        "hasReceivedPayout": false,
+        "user": { "firstName": "Ada", "lastName": "Obi" }
+      }
+    ],
+    "contributions": [
+      {
+        "id": "ctr_1",
+        "amount": 5000,
+        "round": 1,
+        "status": "COMPLETED",
+        "createdAt": "2026-01-15T10:00:00Z",
+        "user": { "firstName": "Ada" }
+      }
+    ]
+  }
+}
+```
+
+**Error cases**
+
+| Status | Reason |
+|--------|--------|
+| 401 | Missing or invalid token |
+| 403 | Authenticated user is not a member or organiser |
+| 404 | Circle not found |
+
+---
+
+### Update a circle
+
+Only the organiser can update a circle's name, description, or status.
+
+```bash
+curl -X PUT https://api.example.com/api/circles/clx1abc123 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Extended Family Savings", "description": "Updated description" }'
+```
+
+**Request body** (all fields optional)
+
+```json
+{
+  "name": "Extended Family Savings",
+  "description": "Updated description",
+  "status": "PAUSED"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "circle": { "id": "clx1abc123", "name": "Extended Family Savings", "status": "PAUSED" }
+}
+```
+
+**Error cases**
+
+| Status | Reason |
+|--------|--------|
+| 403 | Authenticated user is not the organiser |
+| 404 | Circle not found |
+
+---
+
+### Preview a circle before joining
+
+```bash
+curl https://api.example.com/api/circles/clx1abc123/join \
+  -H "Authorization: Bearer <token>"
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "alreadyMember": false,
+  "circle": {
+    "id": "clx1abc123",
+    "name": "Family Savings",
+    "contributionAmount": 5000,
+    "contributionFrequencyDays": 30,
+    "maxRounds": 12,
+    "currentRound": 1,
+    "status": "ACTIVE",
+    "organizer": { "firstName": "Ada", "lastName": "Obi" },
+    "members": [{ "id": "mem_1" }]
+  }
+}
+```
+
+---
+
+### Join a circle
+
+The user's email must be verified before joining.
+
+```bash
+curl -X POST https://api.example.com/api/circles/clx1abc123/join \
+  -H "Authorization: Bearer <token>"
+```
+
+No request body required.
+
+**Response (201)**
+
+```json
+{
+  "success": true,
+  "member": {
+    "id": "mem_2",
+    "circleId": "clx1abc123",
+    "userId": "usr_2",
+    "rotationOrder": 2,
+    "status": "ACTIVE",
+    "totalContributed": 0
+  }
+}
+```
+
+**Error cases**
+
+| Status | Error | Reason |
+|--------|-------|--------|
+| 403 | — | Email not verified |
+| 403 | — | Circle not accepting new members (`status` is not `ACTIVE` or `PENDING`) |
+| 404 | — | Circle not found |
+| 409 | `CircleAtCapacity` | Circle has reached the maximum member limit |
+| 409 | — | User is already a member |
+
+**Edge case — joining a full circle**
+
+```json
+{
+  "error": "CircleAtCapacity",
+  "message": "Circle has reached the maximum of 20 members"
+}
+```
+
+---
+
+### Contribute to a circle
+
+The `amount` must exactly match the circle's `contributionAmount`. The balance update and contribution record are written atomically, so concurrent requests from the same user cannot produce duplicate or incorrect balances.
+
+```bash
+curl -X POST https://api.example.com/api/circles/clx1abc123/contribute \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 5000 }'
+```
+
+**Request body**
+
+```json
+{ "amount": 5000 }
+```
+
+**Response (201)**
+
+```json
+{
+  "success": true,
+  "contribution": {
+    "id": "ctr_99",
+    "circleId": "clx1abc123",
+    "userId": "usr_2",
+    "amount": 5000,
+    "round": 2,
+    "status": "COMPLETED",
+    "createdAt": "2026-04-27T09:00:00Z",
+    "user": { "id": "usr_2", "firstName": "Emeka", "lastName": "Nwosu" }
+  }
+}
+```
+
+**Error cases**
+
+| Status | Error | Reason |
+|--------|-------|--------|
+| 400 | `InvalidInput` | Amount does not match the circle's `contributionAmount` |
+| 403 | — | Authenticated user is not a member of this circle |
+| 404 | — | Circle not found |
+| 429 | — | Rate limit exceeded |
+
+**Edge case — wrong amount**
+
+```json
+{
+  "error": "InvalidInput",
+  "message": "Contribution amount must exactly match the circle contribution amount",
+  "details": {
+    "expectedAmount": 5000,
+    "min": 100,
+    "max": 1000000
+  }
+}
+```
+
+---
+
+### Invite a member (organiser only)
+
+```bash
+curl -X POST https://api.example.com/api/circles/clx1abc123/admin/invite \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "newmember@example.com" }'
+```
+
+**Request body**
+
+```json
+{ "email": "newmember@example.com" }
+```
+
+**Response (200)**
+
+```json
+{ "success": true, "message": "Member invited successfully" }
+```
+
+**Error cases**
+
+| Status | Reason |
+|--------|--------|
+| 400 | User is already a member |
+| 403 | Authenticated user is not the organiser |
+| 404 | Circle not found, or no account exists for that email |
+
+---
+
+### Governance — list proposals
+
+```bash
+curl https://api.example.com/api/circles/clx1abc123/governance \
+  -H "Authorization: Bearer <token>"
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "totalMembers": 8,
+  "proposals": [
+    {
+      "id": "prop_1",
+      "title": "Increase contribution amount",
+      "description": "Proposal to raise monthly contribution from 5000 to 7500.",
+      "proposalType": "CONTRIBUTION_CHANGE",
+      "status": "ACTIVE",
+      "votingStartDate": "2026-04-01T00:00:00Z",
+      "votingEndDate": "2026-04-15T00:00:00Z",
+      "requiredQuorum": 60,
+      "yesVotes": 5,
+      "noVotes": 1,
+      "abstainVotes": 0,
+      "totalVotes": 6,
+      "totalMembers": 8,
+      "quorumPercentage": 75,
+      "userVote": "YES"
+    }
+  ]
+}
+```
+
+---
+
+### Governance — create a proposal
+
+```bash
+curl -X POST https://api.example.com/api/circles/clx1abc123/governance \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Increase contribution amount",
+    "description": "Proposal to raise monthly contribution from 5000 to 7500.",
+    "proposalType": "CONTRIBUTION_CHANGE",
+    "votingEndDate": "2026-05-15T00:00:00Z",
+    "requiredQuorum": 60
+  }'
+```
+
+**Response (201)**
+
+```json
+{
+  "success": true,
+  "proposal": {
+    "id": "prop_2",
+    "title": "Increase contribution amount",
+    "status": "ACTIVE",
+    "votingStartDate": "2026-04-27T09:00:00Z",
+    "votingEndDate": "2026-05-15T00:00:00Z",
+    "requiredQuorum": 60,
+    "votes": []
+  }
+}
+```
+
+**Error cases**
+
+| Status | Reason |
+|--------|--------|
+| 403 | Authenticated user is not a member or organiser |
+| 404 | Circle not found |
 
 ## Smart Contract Reference
 

@@ -6,6 +6,7 @@ import { ContributeSchema, MIN_CONTRIBUTION_AMOUNT, MAX_CONTRIBUTION_AMOUNT } fr
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { sendContributionReminder, sendPayoutAlert } from '@/lib/email';
 import { createChildLogger } from '@/lib/logger';
+import { cacheInvalidatePrefix } from '@/lib/cache';
 
 const logger = createChildLogger({ service: 'api', route: '/api/circles/[id]/contribute' });
 
@@ -60,22 +61,42 @@ export async function POST(
       return NextResponse.json({ error: 'You are not a member of this circle' }, { status: 403 });
     }
 
-    const contribution = await prisma.contribution.create({
-      data: {
-        circleId: id,
-        userId: payload.userId,
-        amount: data.amount,
-        round: circle.currentRound,
-        status: 'COMPLETED',
-      },
-      include: { user: { select: { id: true, firstName: true, lastName: true } } },
-    });
+    // Wrap the contribution record creation and balance update in a single atomic
+    // transaction so concurrent requests cannot produce an incorrect remaining balance.
+    const { contribution, totalContributedThisRound, totalMembers } =
+      await prisma.$transaction(async (tx) => {
+        const newContribution = await tx.contribution.create({
+          data: {
+            circleId: id,
+            userId: payload.userId,
+            amount: data.amount,
+            round: circle.currentRound,
+            status: 'COMPLETED',
+          },
+          include: { user: { select: { id: true, firstName: true, lastName: true } } },
+        });
 
-    await prisma.circleMember.update({
-      where: { circleId_userId: { circleId: id, userId: payload.userId } },
-      data: { totalContributed: { increment: data.amount } },
-    });
+        await tx.circleMember.update({
+          where: { circleId_userId: { circleId: id, userId: payload.userId } },
+          data: { totalContributed: { increment: data.amount } },
+        });
 
+        // Count contributions for this round inside the transaction so the
+        // number is consistent with the balance update above.
+        const roundContribCount = await tx.contribution.count({
+          where: { circleId: id, round: circle.currentRound },
+        });
+
+        const memberCount = await tx.circleMember.count({ where: { circleId: id } });
+
+        return {
+          contribution: newContribution,
+          totalContributedThisRound: roundContribCount,
+          totalMembers: memberCount,
+        };
+      });
+
+    // Post-transaction: send reminder emails to members who haven't contributed yet.
     const allMembers = await prisma.circleMember.findMany({
       where: { circleId: id },
       include: { user: { select: { email: true, firstName: true } } },
@@ -85,27 +106,26 @@ export async function POST(
       select: { userId: true },
     });
     const contributedIds = new Set(contributedThisRound.map((c: { userId: string }) => c.userId));
-    
+
     for (const m of allMembers) {
       if (!contributedIds.has(m.userId)) {
         await sendContributionReminder(m.user.email, m.user.firstName, circle.contributionAmount, circle.name);
       }
     }
 
-    const totalContributedThisRound = contributedIds.size + 1;
-    if (totalContributedThisRound >= allMembers.length) {
+    if (totalContributedThisRound >= totalMembers) {
       const payoutMember = await prisma.circleMember.findFirst({
         where: { circleId: id, rotationOrder: circle.currentRound },
         include: { user: { select: { email: true, firstName: true } } },
       });
       if (payoutMember) {
-        const payoutAmount = circle.contributionAmount * allMembers.length;
+        const payoutAmount = circle.contributionAmount * totalMembers;
         await sendPayoutAlert(payoutMember.user.email, payoutMember.user.firstName, payoutAmount);
       }
     }
 
     // Bust detail cache so contribution totals are fresh
-    invalidatePrefix(`circles:detail:${id}`);
+    cacheInvalidatePrefix(`circles:detail:${id}`);
 
     return NextResponse.json({ success: true, contribution }, { status: 201 });
   } catch (err) {

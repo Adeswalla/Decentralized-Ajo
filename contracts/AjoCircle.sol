@@ -47,6 +47,10 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
         bool isActive;
     }
 
+    // ---------------- Constants ----------------
+    /// @dev Minimum seconds between successive withdrawal calls per member.
+    uint256 public constant WITHDRAWAL_COOLDOWN = 1 days;
+
     // ---------------- Mappings ----------------
     mapping(uint256 => Circle) public circles;
     mapping(uint256 => mapping(address => Member)) public members;
@@ -56,6 +60,8 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
     mapping(uint256 => uint256) public roundDeadline;
     mapping(uint256 => uint256) public totalPool;
     mapping(uint256 => mapping(address => bool)) public whitelist;
+    /// @dev Tracks the last timestamp a member successfully withdrew, per circle.
+    mapping(uint256 => mapping(address => uint256)) public lastWithdrawalTimestamp;
     
     // ---------------- Counters ----------------
     uint256 public circleCounter;
@@ -104,6 +110,7 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
     error PriceFeedUnavailable();
     error ArithmeticOverflow();
     error NotWhitelisted();
+    error WithdrawalCooldownActive();
 
     // ---------------- Modifiers ----------------
     modifier onlyCircleMember(uint256 _circleId) {
@@ -401,6 +408,12 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
             "Not your turn"
         );
 
+        // Enforce withdrawal cooldown to prevent bot spam
+        uint256 lastTs = lastWithdrawalTimestamp[_circleId][msg.sender];
+        if (lastTs != 0 && block.timestamp < lastTs + WITHDRAWAL_COOLDOWN) {
+            revert WithdrawalCooldownActive();
+        }
+
         uint256 payoutAmount = totalPool[_circleId];
         require(payoutAmount > 0, "No funds available");
 
@@ -409,6 +422,7 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
         totalPool[_circleId]          = 0;
         members[_circleId][msg.sender].hasReceivedPayout = true;
         members[_circleId][msg.sender].totalWithdrawn = memberData.totalWithdrawn.add(payoutAmount);
+        lastWithdrawalTimestamp[_circleId][msg.sender] = block.timestamp;
         uint256 newIndex              = currentPayoutIndex[_circleId].add(1);
         currentPayoutIndex[_circleId] = newIndex;
 

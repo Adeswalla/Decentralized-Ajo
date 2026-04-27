@@ -17,6 +17,9 @@ error CycleExceeded();
 /// @dev Low-level ETH transfer to the receiver failed.
 error TransferFailed();
 
+/// @dev Withdrawal attempted before the cooldown period has elapsed.
+error WithdrawalCooldownActive();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Contract
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,6 +43,12 @@ contract DecentralizedAjo {
     /// @notice Current cycle index, starting at 1.
     ///         Maps to members[currentCycle - 1] for the expected receiver.
     uint256 public currentCycle;
+
+    /// @notice Minimum seconds that must elapse between withdrawal calls per member.
+    uint256 public constant WITHDRAWAL_COOLDOWN = 1 days;
+
+    /// @notice Tracks the last timestamp each member successfully withdrew.
+    mapping(address => uint256) public lastWithdrawalTimestamp;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -81,6 +90,12 @@ contract DecentralizedAjo {
         // Only the designated member may trigger this cycle's withdrawal
         if (msg.sender != expectedReceiver) revert UnauthorizedCycle();
 
+        // Enforce cooldown: reject calls made within WITHDRAWAL_COOLDOWN of the last withdrawal
+        uint256 lastTs = lastWithdrawalTimestamp[msg.sender];
+        if (lastTs != 0 && block.timestamp < lastTs + WITHDRAWAL_COOLDOWN) {
+            revert WithdrawalCooldownActive();
+        }
+
         // Pool must equal contributionAmount × total number of members
         uint256 required = contributionAmount * members.length;
         if (totalPool < required) revert PoolIncomplete();
@@ -90,6 +105,7 @@ contract DecentralizedAjo {
         uint256 amount = totalPool;
         totalPool = 0;
         currentCycle += 1;
+        lastWithdrawalTimestamp[msg.sender] = block.timestamp;
 
         // ── Interactions ──────────────────────────────────────────────────────
 
