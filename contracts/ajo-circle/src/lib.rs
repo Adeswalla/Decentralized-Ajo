@@ -746,7 +746,7 @@ impl AjoCircle {
         }
 
         let net_contributed = member_data.total_contributed - member_data.total_withdrawn;
-        let penalty = (net_contributed as u128 * WITHDRAWAL_PENALTY_PERCENT as u128 / 100) as i128;
+        let penalty = net_contributed / 10;
         let refund = net_contributed - penalty;
 
         member_data.total_withdrawn += refund;
