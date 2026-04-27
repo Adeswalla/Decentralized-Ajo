@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
 import { applyRateLimit, validateId } from '@/lib/api-helpers';
@@ -92,14 +93,6 @@ export async function POST(
 
     if (!circle) return NextResponse.json({ error: 'Circle not found' }, { status: 404 });
 
-    const existingMember = await prisma.circleMember.findUnique({
-      where: { circleId_userId: { circleId: id, userId: payload.userId } },
-    });
-
-    if (existingMember) {
-      return NextResponse.json({ error: 'You are already a member of this circle' }, { status: 409 });
-    }
-
     if (circle.status !== 'ACTIVE' && circle.status !== 'PENDING') {
       return NextResponse.json({ error: 'This circle is not accepting new members' }, { status: 403 });
     }
@@ -124,6 +117,9 @@ export async function POST(
 
     return NextResponse.json({ success: true, member: newMember }, { status: 201 });
   } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return NextResponse.json({ error: 'You are already a member of this circle' }, { status: 409 });
+    }
     logger.error('Join circle error', { err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
