@@ -6,6 +6,15 @@ import { prisma } from '@/lib/prisma';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this';
 const JWT_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_BCRYPT_SALT_ROUNDS = 10;
+const MIN_BCRYPT_SALT_ROUNDS = 8;
+const MAX_BCRYPT_SALT_ROUNDS = 12;
+
+const parsedBcryptRounds = Number.parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '', 10);
+export const BCRYPT_SALT_ROUNDS = Number.isNaN(parsedBcryptRounds)
+  ? DEFAULT_BCRYPT_SALT_ROUNDS
+  : Math.min(Math.max(parsedBcryptRounds, MIN_BCRYPT_SALT_ROUNDS), MAX_BCRYPT_SALT_ROUNDS);
+
 export const REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
 
 export type TokenType = 'user' | 'service';
@@ -21,8 +30,7 @@ export interface JWTPayload {
 
 // Hash password
 export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
 // Verify password
