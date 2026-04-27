@@ -50,6 +50,8 @@ pub const MIN_ROUNDS: u32 = 2;
 pub const MAX_ROUNDS: u32 = 100;
 pub const WITHDRAWAL_PENALTY_PERCENT: u32 = 10;
 pub const UPGRADE_TIMELOCK_SECONDS: u64 = 48 * 3600; // 48 hours
+/// Minimum ledger seconds between successive withdrawal calls per member.
+pub const WITHDRAWAL_COOLDOWN_SECONDS: u64 = 86_400; // 1 day
 // LIMIT_SYNC_TAG: v1.0.2
 
 // ---------------- ROLE CONSTANTS ----------------
@@ -77,6 +79,7 @@ pub enum AjoError {
     ArithmeticOverflow = 16,
     Paused = 17,
     TimelockNotReady = 18,
+    WithdrawalCooldownActive = 19,
 }
 
 #[contracttype]
@@ -162,6 +165,8 @@ pub enum DataKey {
     Standing(Address),
     /// Per-member last deposit timestamp — O(1) direct access
     LastDeposit(Address),
+    /// Per-member last withdrawal timestamp — O(1) direct access
+    LastWithdrawal(Address),
     /// Per-member KYC status — O(1) direct access
     KycVerified(Address),
     /// Pending WASM upgrade proposal (timelock)
@@ -689,6 +694,18 @@ impl AjoCircle {
             return Err(AjoError::InsufficientFunds);
         }
 
+        // Enforce withdrawal cooldown to prevent bot spam
+        let now: u64 = env.ledger().timestamp();
+        if let Some(last_ts) = env
+            .storage()
+            .instance()
+            .get::<DataKey, u64>(&DataKey::LastWithdrawal(member.clone()))
+        {
+            if now < last_ts.saturating_add(WITHDRAWAL_COOLDOWN_SECONDS) {
+                return Err(AjoError::WithdrawalCooldownActive);
+            }
+        }
+
         let payout = required;
 
         // EFFECTS — all state before token transfer
@@ -702,6 +719,11 @@ impl AjoCircle {
         env.storage()
             .instance()
             .set(&DataKey::TotalPool, &(pool.checked_sub(payout).ok_or(AjoError::ArithmeticOverflow)?));
+
+        // Record withdrawal timestamp
+        env.storage()
+            .instance()
+            .set(&DataKey::LastWithdrawal(member.clone()), &now);
 
         // INTERACTIONS
         let token_client = token::Client::new(&env, &circle.token_address);
@@ -745,6 +767,18 @@ impl AjoCircle {
             return Err(AjoError::InsufficientFunds);
         }
 
+        // Enforce withdrawal cooldown to prevent bot spam
+        let now: u64 = env.ledger().timestamp();
+        if let Some(last_ts) = env
+            .storage()
+            .instance()
+            .get::<DataKey, u64>(&DataKey::LastWithdrawal(member.clone()))
+        {
+            if now < last_ts.saturating_add(WITHDRAWAL_COOLDOWN_SECONDS) {
+                return Err(AjoError::WithdrawalCooldownActive);
+            }
+        }
+
         let net_contributed = member_data.total_contributed - member_data.total_withdrawn;
         let penalty = (net_contributed as u128 * WITHDRAWAL_PENALTY_PERCENT as u128 / 100) as i128;
         let refund = net_contributed - penalty;
@@ -757,6 +791,11 @@ impl AjoCircle {
         env.storage()
             .instance()
             .set(&DataKey::TotalPool, &(pool.checked_sub(refund).ok_or(AjoError::ArithmeticOverflow)?));
+
+        // Record withdrawal timestamp
+        env.storage()
+            .instance()
+            .set(&DataKey::LastWithdrawal(member.clone()), &now);
 
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&env.current_contract_address(), &member, &refund);
