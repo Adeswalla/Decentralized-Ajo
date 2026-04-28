@@ -367,11 +367,21 @@ import {
 
 ### Authentication
 
-#### Register
+The full email/password authentication flow is: **Register → Verify Email → Login → (use token) → Refresh → Logout**.
+
+All protected endpoints require the `Authorization: Bearer <token>` header. The refresh token is stored automatically in an `HttpOnly` cookie (`ajo_refresh_token`).
+
+---
+
+#### 1. Register
+
 ```http
 POST /api/auth/register
 Content-Type: application/json
+```
 
+**Request body**
+```json
 {
   "email": "user@example.com",
   "password": "SecurePassword123!",
@@ -380,16 +390,242 @@ Content-Type: application/json
 }
 ```
 
-#### Login
+**Response `201`**
+```json
+{
+  "success": true,
+  "message": "Registration successful. Please check your email to verify your account."
+}
+```
+
+**curl**
+```bash
+curl -X POST https://your-app.vercel.app/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePassword123!","firstName":"John","lastName":"Doe"}'
+```
+
+**fetch**
+```js
+const res = await fetch('/api/auth/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'SecurePassword123!',
+    firstName: 'John',
+    lastName: 'Doe',
+  }),
+});
+const data = await res.json(); // { success: true, message: '...' }
+```
+
+> **Password requirements:** minimum 8 characters, at least one uppercase letter, one lowercase letter, one number, and one special character.
+
+---
+
+#### 2. Verify Email
+
+After registration, a verification link is sent to the user's email. The link calls:
+
+```http
+GET /api/auth/verify-email?token=<verification_token>
+```
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Email verified successfully"
+}
+```
+
+> Login is blocked until the email is verified. If the token expires (24 hours), use the resend endpoint: `POST /api/auth/verify-email/resend`.
+
+---
+
+#### 3. Login
+
 ```http
 POST /api/auth/login
 Content-Type: application/json
+```
 
+**Request body**
+```json
 {
   "email": "user@example.com",
   "password": "SecurePassword123!"
 }
 ```
+
+**Response `200`** — sets `ajo_refresh_token` HttpOnly cookie automatically
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "clx1abc123",
+    "email": "user@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "walletAddress": null
+  }
+}
+```
+
+**curl**
+```bash
+curl -X POST https://your-app.vercel.app/api/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{"email":"user@example.com","password":"SecurePassword123!"}'
+```
+
+**fetch**
+```js
+const res = await fetch('/api/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include', // required to store the refresh token cookie
+  body: JSON.stringify({ email: 'user@example.com', password: 'SecurePassword123!' }),
+});
+const { token, user } = await res.json();
+// Store `token` in memory (not localStorage) for use in subsequent requests
+```
+
+---
+
+#### 4. Authenticated Request
+
+Use the access token from login in the `Authorization` header:
+
+**curl**
+```bash
+curl https://your-app.vercel.app/api/circles \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**fetch**
+```js
+const res = await fetch('/api/circles', {
+  headers: { Authorization: `Bearer ${token}` },
+  credentials: 'include',
+});
+```
+
+---
+
+#### 5. Refresh Token
+
+Access tokens expire after **15 minutes**. Use the refresh endpoint to get a new one — the `ajo_refresh_token` cookie is sent automatically by the browser.
+
+```http
+POST /api/auth/refresh
+```
+
+**Response `200`** — issues a new access token and rotates the refresh token cookie
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**curl**
+```bash
+curl -X POST https://your-app.vercel.app/api/auth/refresh \
+  -b cookies.txt -c cookies.txt
+```
+
+**fetch**
+```js
+const res = await fetch('/api/auth/refresh', {
+  method: 'POST',
+  credentials: 'include', // sends the HttpOnly cookie automatically
+});
+const { token } = await res.json();
+```
+
+> If the refresh token has been reused (replay attack), the entire session family is revoked and a `401` is returned — the user must log in again.
+
+---
+
+#### 6. Logout
+
+```http
+POST /api/auth/logout
+Authorization: Bearer <token>
+```
+
+**Response `200`** — revokes all refresh tokens for the user and clears the cookie
+```json
+{ "success": true }
+```
+
+**curl**
+```bash
+curl -X POST https://your-app.vercel.app/api/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -b cookies.txt -c cookies.txt
+```
+
+**fetch**
+```js
+await fetch('/api/auth/logout', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+  credentials: 'include',
+});
+```
+
+---
+
+#### 7. Wallet Authentication (Stellar)
+
+For wallet-based login (Freighter / Lobstr), use the nonce challenge flow:
+
+**Step 1 — Request a nonce**
+```http
+GET /api/auth/wallet/nonce?address=G...
+```
+```json
+{ "nonce": "a3f9...random...7c2b" }
+```
+
+**Step 2 — Sign the nonce with your Stellar keypair and verify**
+```http
+POST /api/auth/wallet/verify
+Content-Type: application/json
+```
+```json
+{
+  "address": "GABC...STELLAR_PUBLIC_KEY",
+  "nonce": "a3f9...random...7c2b",
+  "signature": "<base64-encoded Stellar signature of the nonce>"
+}
+```
+
+**Response `200`** — sets `ajo_refresh_token` cookie
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "address": "GABC...STELLAR_PUBLIC_KEY"
+}
+```
+
+---
+
+#### Error Responses
+
+| Status | Code | Meaning |
+|--------|------|---------|
+| `400` | — | Validation error (missing/invalid fields) |
+| `401` | `invalid_credentials` | Wrong email or password |
+| `401` | — | Invalid or expired token / nonce |
+| `403` | `email_not_verified` | Email not yet verified |
+| `409` | — | Email already registered |
+| `429` | — | Rate limit exceeded |
 
 ### Circles
 
