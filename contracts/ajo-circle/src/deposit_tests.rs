@@ -242,7 +242,7 @@ fn test_deposit_fails_when_panicked() {
 
     // Attempt deposit should fail
     let result = client.deposit(&organizer);
-    assert_eq!(result, Err(AjoError::CirclePanicked));
+    assert_eq!(result, Err(AjoError::Paused));
 
     // Verify pool unchanged
     assert_eq!(client.get_total_pool(), 0_i128);
@@ -262,7 +262,7 @@ fn test_pause_blocks_withdrawal() {
     client.panic(&organizer);
 
     let withdraw_result = client.withdraw(&organizer, &1_u32);
-    assert_eq!(withdraw_result, Err(AjoError::CirclePanicked));
+    assert_eq!(withdraw_result, Err(AjoError::Paused));
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn test_resume_reenables_deposit_and_withdrawal() {
 
     // Pause and verify deposit blocked
     client.panic(&organizer);
-    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+    assert_eq!(client.deposit(&organizer), Err(AjoError::Paused));
 
     // Resume and verify operations succeed
     client.resume(&organizer);

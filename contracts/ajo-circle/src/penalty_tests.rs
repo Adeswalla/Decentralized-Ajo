@@ -352,7 +352,7 @@ fn test_partial_withdraw_blocked_when_paused() {
     client.panic(&organizer).unwrap();
 
     let result = client.partial_withdraw(&member);
-    assert_eq!(result, Err(AjoError::CirclePanicked));
+    assert_eq!(result, Err(AjoError::Paused));
 }
 
 /// After a partial_withdraw, a second call fails with InsufficientFunds

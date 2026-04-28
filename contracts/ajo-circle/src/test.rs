@@ -342,7 +342,7 @@ fn test_deposit_blocked_when_paused() {
 
     client.panic(&organizer).unwrap();
     let result = client.deposit(&organizer);
-    assert_eq!(result, Err(AjoError::CirclePanicked));
+    assert_eq!(result, Err(AjoError::Paused));
 }
 
 #[test]
@@ -517,7 +517,7 @@ fn test_claim_payout_blocked_when_paused() {
 
     client.panic(&organizer).unwrap();
     let result = client.claim_payout(&organizer, &1);
-    assert_eq!(result, Err(AjoError::CirclePanicked));
+    assert_eq!(result, Err(AjoError::Paused));
 }
 
 #[test]
@@ -596,7 +596,7 @@ fn test_panic_pauses_contract() {
     let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
 
     client.panic(&organizer).unwrap();
-    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+    assert_eq!(client.deposit(&organizer), Err(AjoError::Paused));
 }
 
 #[test]
@@ -621,7 +621,7 @@ fn test_emergency_stop_is_alias_for_panic() {
     let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
 
     client.emergency_stop(&organizer).unwrap();
-    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+    assert_eq!(client.deposit(&organizer), Err(AjoError::Paused));
 }
 
 #[test]
@@ -1099,7 +1099,7 @@ fn test_emergency_panic_by_deployer_pauses_contract() {
     let (client, _tok, organizer, _a, _b) = setup(&env, 100, 5);
 
     client.emergency_panic(&organizer).unwrap();
-    assert_eq!(client.deposit(&organizer), Err(AjoError::CirclePanicked));
+    assert_eq!(client.deposit(&organizer), Err(AjoError::Paused));
 }
 
 #[test]
