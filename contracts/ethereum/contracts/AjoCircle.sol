@@ -304,6 +304,85 @@ contract AjoCircle is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         emit ContributionMade(msg.sender, _amount);
     }
 
+    /// @notice Batch contribute on behalf of multiple members
+    /// @dev Processes multiple contributions in a single transaction to save gas
+    /// @param _members Array of member addresses to contribute for
+    /// @param _amounts Array of contribution amounts (must match _members length)
+    function batchContribute(address[] calldata _members, uint256[] calldata _amounts) 
+        external 
+        onlyOrganizer 
+        notPanicked 
+        nonReentrant 
+    {
+        if (_members.length == 0) revert InvalidInput();
+        if (_members.length != _amounts.length) revert InvalidInput();
+        if (_members.length > 50) revert InvalidInput(); // Limit batch size to prevent gas issues
+
+        CircleData memory _circle = circle;
+        uint256 totalAmount = 0;
+        uint256 newCompletions = 0;
+
+        // First pass: validate all inputs and calculate total
+        for (uint256 i = 0; i < _members.length; i++) {
+            address memberAddr = _members[i];
+            uint256 amount = _amounts[i];
+
+            if (amount == 0) revert InvalidInput();
+            if (members[memberAddr].memberAddress == address(0)) revert NotFound();
+
+            MemberStanding storage standing = standings[memberAddr];
+            if (standing.missedCount >= 3) revert Disqualified();
+            if (!standing.isActive) revert Disqualified();
+
+            totalAmount += amount;
+        }
+
+        // Single token transfer for all contributions
+        IERC20Upgradeable(_circle.tokenAddress).safeTransferFrom(
+            msg.sender, 
+            address(this), 
+            totalAmount
+        );
+
+        // Second pass: update member states
+        for (uint256 i = 0; i < _members.length; i++) {
+            address memberAddr = _members[i];
+            uint256 amount = _amounts[i];
+
+            MemberStanding storage standing = standings[memberAddr];
+            standing.missedCount = 0;
+
+            MemberData storage member = members[memberAddr];
+            uint256 roundTarget = uint256(_circle.currentRound) * _circle.contributionAmount;
+            bool hadCompletedRound = member.totalContributed >= roundTarget;
+
+            member.totalContributed += amount;
+
+            bool hasCompletedRound = member.totalContributed >= roundTarget;
+
+            if (!hadCompletedRound && hasCompletedRound) {
+                newCompletions++;
+            }
+
+            emit ContributionMade(memberAddr, amount);
+        }
+
+        // Update round progress once at the end
+        if (newCompletions > 0) {
+            uint256 _roundContribCount = roundContribCount + newCompletions;
+
+            if (_roundContribCount >= uint256(_circle.memberCount)) {
+                roundDeadline += uint256(_circle.frequencyDays) * 1 days;
+                if (_circle.currentRound < _circle.maxRounds) {
+                    circle.currentRound = _circle.currentRound + 1;
+                }
+                roundContribCount = 0;
+            } else {
+                roundContribCount = _roundContribCount;
+            }
+        }
+    }
+
     function deposit() external onlyMember notPanicked nonReentrant {
         MemberStanding storage standing = standings[msg.sender];
         if (standing.missedCount >= 3) revert Disqualified();

@@ -51,6 +51,23 @@ export const ContributeSchema = z.object({
     .max(MAX_CONTRIBUTION_AMOUNT, `InvalidInput: max contribution is ${MAX_CONTRIBUTION_AMOUNT}`),
 });
 
+export const BatchContributeSchema = z.object({
+  contributions: z
+    .array(
+      z.object({
+        userId: z.string().min(1, 'InvalidInput: userId is required'),
+        amount: z
+          .number()
+          .int('InvalidInput: amount must be an integer')
+          .min(MIN_CONTRIBUTION_AMOUNT, `InvalidInput: min contribution is ${MIN_CONTRIBUTION_AMOUNT}`)
+          .max(MAX_CONTRIBUTION_AMOUNT, `InvalidInput: max contribution is ${MAX_CONTRIBUTION_AMOUNT}`),
+      })
+    )
+    .min(1, 'InvalidInput: at least one contribution is required')
+    .max(50, 'InvalidInput: maximum 50 contributions per batch'),
+});
+
 export type CreateCircleInput = z.infer<typeof CreateCircleSchema>;
 export type UpdateCircleInput = z.infer<typeof UpdateCircleSchema>;
 export type ContributeInput = z.infer<typeof ContributeSchema>;
+export type BatchContributeInput = z.infer<typeof BatchContributeSchema>;
