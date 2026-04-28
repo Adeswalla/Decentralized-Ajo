@@ -30,6 +30,9 @@ mod interest_tests;
 #[cfg(test)]
 mod staking_tests;
 
+#[cfg(test)]
+mod split_payout_tests;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
     Symbol, Vec, BytesN,
@@ -106,12 +109,20 @@ pub struct CircleData {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Beneficiary {
+    pub address: Address,
+    pub share_bps: u32, // Share in basis points (e.g., 5000 = 50.00%)
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemberData {
     pub address: Address,
     pub total_contributed: i128,
     pub total_withdrawn: i128,
     pub has_received_payout: bool,
     pub status: u32,
+    pub beneficiaries: Option<Vec<Beneficiary>>,
 }
 
 #[contracttype]
@@ -386,6 +397,7 @@ impl AjoCircle {
             total_withdrawn: 0,
             has_received_payout: false,
             status: 0,
+            beneficiaries: None,
         };
         Self::save_member(&env, &organizer, &organizer_data);
         Self::save_standing(&env, &organizer, &MemberStanding { missed_count: 0, is_active: true });
@@ -422,6 +434,7 @@ impl AjoCircle {
             total_withdrawn: 0,
             has_received_payout: false,
             status: 0,
+            beneficiaries: None,
         });
         Self::save_standing(&env, &new_member, &MemberStanding { missed_count: 0, is_active: true });
         Self::push_member_list(&env, &new_member);
@@ -434,6 +447,29 @@ impl AjoCircle {
 
     pub fn add_member(env: Env, organizer: Address, new_member: Address) -> Result<(), AjoError> {
         Self::join_circle(env, organizer, new_member)
+    }
+
+    pub fn set_beneficiaries(env: Env, member: Address, beneficiaries: Vec<Beneficiary>) -> Result<(), AjoError> {
+        member.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let mut member_data = Self::load_member(&env, &member)?;
+
+        if beneficiaries.len() == 0 {
+            member_data.beneficiaries = None;
+        } else {
+            let mut total_share: u32 = 0;
+            for b in beneficiaries.iter() {
+                total_share = total_share.checked_add(b.share_bps).ok_or(AjoError::ArithmeticOverflow)?;
+            }
+            if total_share != 10000 {
+                return Err(AjoError::InvalidInput);
+            }
+            member_data.beneficiaries = Some(beneficiaries);
+        }
+
+        Self::save_member(&env, &member, &member_data);
+        Ok(())
     }
 
     /// Remove a member before the circle starts, refunding any contributions they have made.
@@ -754,7 +790,26 @@ impl AjoCircle {
 
         // INTERACTIONS
         let token_client = token::Client::new(&env, &circle.token_address);
-        token_client.transfer(&env.current_contract_address(), &member, &payout);
+        
+        if let Some(beneficiaries) = member_data.beneficiaries {
+            let mut remaining = payout;
+            let len = beneficiaries.len();
+            for i in 0..len {
+                let b = beneficiaries.get(i).unwrap();
+                let share = if i == len - 1 {
+                    remaining
+                } else {
+                    payout.checked_mul(b.share_bps as i128).ok_or(AjoError::ArithmeticOverflow)? / 10000
+                };
+                
+                if share > 0 {
+                    token_client.transfer(&env.current_contract_address(), &b.address, &share);
+                    remaining = remaining.checked_sub(share).ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        } else {
+            token_client.transfer(&env.current_contract_address(), &member, &payout);
+        }
 
         // Emit structured payout event
         emit_payout(&env, &WithdrawalEvent {
