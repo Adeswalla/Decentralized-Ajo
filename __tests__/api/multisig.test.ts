@@ -1,13 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { createMocks } from 'node-mocks-http';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { POST as withdrawPost, GET as withdrawGet } from '@/app/api/circles/[id]/withdraw/route';
 import { POST as approvePost } from '@/app/api/circles/[id]/withdraw/[withdrawalId]/approve/route';
 import { GET as multisigGet, PUT as multisigPut } from '@/app/api/circles/[id]/multisig/route';
 import { prisma } from '@/lib/prisma';
-import { signToken } from '@/lib/auth';
-import { cleanupTestData, createTestUser, createTestCircle } from './db-helper';
+import { generateToken } from '@/lib/auth';
+import { TestDbHelper } from './db-helper';
+import { NextRequest } from 'next/server';
 
 describe('Multisig Withdrawal System', () => {
+  const dbHelper = new TestDbHelper();
   let organizer: any;
   let member1: any;
   let member2: any;
@@ -19,44 +20,86 @@ describe('Multisig Withdrawal System', () => {
   let approver1Token: string;
   let approver2Token: string;
 
+  beforeAll(async () => {
+    await dbHelper.cleanup();
+  });
+
+  afterAll(async () => {
+    await dbHelper.disconnect();
+  });
+
   beforeEach(async () => {
-    await cleanupTestData();
+    await dbHelper.cleanup();
 
     // Create test users
-    organizer = await createTestUser('organizer@test.com');
-    member1 = await createTestUser('member1@test.com');
-    member2 = await createTestUser('member2@test.com');
-    approver1 = await createTestUser('approver1@test.com');
-    approver2 = await createTestUser('approver2@test.com');
+    organizer = await prisma.user.create({
+      data: {
+        email: 'organizer@test.com',
+        address: 'org-addr-' + Date.now(),
+        password: 'hashedpassword',
+      },
+    });
+
+    member1 = await prisma.user.create({
+      data: {
+        email: 'member1@test.com',
+        address: 'mem1-addr-' + Date.now(),
+        password: 'hashedpassword',
+      },
+    });
+
+    member2 = await prisma.user.create({
+      data: {
+        email: 'member2@test.com',
+        address: 'mem2-addr-' + Date.now(),
+        password: 'hashedpassword',
+      },
+    });
+
+    approver1 = await prisma.user.create({
+      data: {
+        email: 'approver1@test.com',
+        address: 'app1-addr-' + Date.now(),
+        password: 'hashedpassword',
+      },
+    });
+
+    approver2 = await prisma.user.create({
+      data: {
+        email: 'approver2@test.com',
+        address: 'app2-addr-' + Date.now(),
+        password: 'hashedpassword',
+      },
+    });
 
     // Create tokens
-    organizerToken = signToken({
+    organizerToken = generateToken({
       userId: organizer.id,
       email: organizer.email,
-      type: 'access',
-      scopes: ['user:base'],
     });
-    member1Token = signToken({
+    member1Token = generateToken({
       userId: member1.id,
       email: member1.email,
-      type: 'access',
-      scopes: ['user:base'],
     });
-    approver1Token = signToken({
+    approver1Token = generateToken({
       userId: approver1.id,
       email: approver1.email,
-      type: 'access',
-      scopes: ['user:base'],
     });
-    approver2Token = signToken({
+    approver2Token = generateToken({
       userId: approver2.id,
       email: approver2.email,
-      type: 'access',
-      scopes: ['user:base'],
     });
 
     // Create test circle
-    circle = await createTestCircle(organizer.id);
+    circle = await prisma.circle.create({
+      data: {
+        name: 'Test Circle',
+        organizerId: organizer.id,
+        contributionAmount: 1000000,
+        contributionFrequencyDays: 7,
+        maxRounds: 12,
+      },
+    });
 
     // Add members
     await prisma.circleMember.createMany({
@@ -89,29 +132,34 @@ describe('Multisig Withdrawal System', () => {
     });
   });
 
-  afterEach(async () => {
-    await cleanupTestData();
-  });
+  // Helper to create NextRequest
+  const createRequest = (method: string, token: string, body?: any) => {
+    const url = 'http://localhost:3000/api/test';
+    const headers = new Headers({
+      'authorization': `Bearer ${token}`,
+      'content-type': 'application/json',
+    });
+    
+    return new NextRequest(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  };
 
   describe('Multisig Configuration', () => {
     it('should allow organizer to configure multisig', async () => {
-      const { req, res } = createMocks({
-        method: 'PUT',
-        headers: {
-          authorization: `Bearer ${organizerToken}`,
-        },
-        body: {
-          multisigEnabled: true,
-          multisigThreshold: 1000000, // 1M stroops
-          requiredApprovals: 2,
-          approvers: [approver1.id, approver2.id],
-        },
+      const req = createRequest('PUT', organizerToken, {
+        multisigEnabled: true,
+        multisigThreshold: 1000000, // 1M stroops
+        requiredApprovals: 2,
+        approvers: [approver1.id, approver2.id],
       });
 
-      await multisigPut(req as any, { params: { id: circle.id } });
+      const res = await multisigPut(req, { params: { id: circle.id } });
+      const data = await res.json();
 
-      expect(res._getStatusCode()).toBe(200);
-      const data = JSON.parse(res._getData());
+      expect(res.status).toBe(200);
       expect(data.multisigEnabled).toBe(true);
       expect(data.multisigThreshold).toBe(1000000);
       expect(data.requiredApprovals).toBe(2);
