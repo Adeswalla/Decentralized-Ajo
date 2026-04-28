@@ -33,6 +33,9 @@ mod staking_tests;
 #[cfg(test)]
 mod split_payout_tests;
 
+#[cfg(test)]
+mod balance_simulation_tests;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
     Symbol, Vec, BytesN,
@@ -575,6 +578,23 @@ impl AjoCircle {
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&member, &env.current_contract_address(), &amount);
 
+        // Fee handling: Deduct fee from contribution if configured
+        let mut contribution_to_pool = amount;
+        if let Some(fee_config) = env.storage().instance().get::<DataKey, FeeConfig>(&DataKey::FeeConfig) {
+            if fee_config.fee_bps > 0 {
+                let fee = amount
+                    .checked_mul(fee_config.fee_bps as i128)
+                    .ok_or(AjoError::ArithmeticOverflow)?
+                    / 10000;
+                if fee > 0 {
+                    token_client.transfer(&env.current_contract_address(), &fee_config.treasury, &fee);
+                    contribution_to_pool = contribution_to_pool
+                        .checked_sub(fee)
+                        .ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        }
+
         member_data.total_contributed = member_data
             .total_contributed
             .checked_add(amount)
@@ -582,6 +602,11 @@ impl AjoCircle {
 
         let has_completed_round = member_data.total_contributed >= round_target;
         Self::save_member(&env, &member, &member_data);
+
+        // Update TotalPool with the amount AFTER fee deduction
+        let mut pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
+        pool = pool.checked_add(contribution_to_pool).ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::TotalPool, &pool);
 
         if !had_completed_round && has_completed_round {
             let mut round_contrib_count: u32 = env
@@ -647,7 +672,27 @@ impl AjoCircle {
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&member, &env.current_contract_address(), &amount);
 
-        member_data.total_contributed += amount;
+        // Fee handling: Deduct fee from deposit if configured
+        let mut contribution_to_pool = amount;
+        if let Some(fee_config) = env.storage().instance().get::<DataKey, FeeConfig>(&DataKey::FeeConfig) {
+            if fee_config.fee_bps > 0 {
+                let fee = amount
+                    .checked_mul(fee_config.fee_bps as i128)
+                    .ok_or(AjoError::ArithmeticOverflow)?
+                    / 10000;
+                if fee > 0 {
+                    token_client.transfer(&env.current_contract_address(), &fee_config.treasury, &fee);
+                    contribution_to_pool = contribution_to_pool
+                        .checked_sub(fee)
+                        .ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        }
+
+        member_data.total_contributed = member_data
+            .total_contributed
+            .checked_add(amount)
+            .ok_or(AjoError::ArithmeticOverflow)?;
         Self::save_member(&env, &member, &member_data);
 
         // O(1): record timestamp under per-member key
@@ -656,7 +701,7 @@ impl AjoCircle {
             .set(&DataKey::LastDeposit(member.clone()), &env.ledger().timestamp());
 
         let mut pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
-        pool = pool.checked_add(amount).ok_or(AjoError::InvalidInput)?;
+        pool = pool.checked_add(contribution_to_pool).ok_or(AjoError::ArithmeticOverflow)?;
         env.storage().instance().set(&DataKey::TotalPool, &pool);
 
         // Check round completion by iterating the address list
