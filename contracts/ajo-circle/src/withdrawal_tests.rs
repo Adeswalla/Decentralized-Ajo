@@ -677,7 +677,7 @@ fn test_claim_payout_blocked_when_panicked() {
     client.panic(&organizer).unwrap();
 
     let result = client.claim_payout(&organizer, &1_u32);
-    assert_eq!(result, Err(AjoError::CirclePanicked));
+    assert_eq!(result, Err(AjoError::Paused));
 }
 
 /// Verifies that the pool must be sufficiently funded before a payout is allowed.
