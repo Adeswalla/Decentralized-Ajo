@@ -36,6 +36,9 @@ mod split_payout_tests;
 #[cfg(test)]
 mod balance_simulation_tests;
 
+#[cfg(test)]
+mod validation_tests;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
     Symbol, Vec, BytesN,
@@ -360,13 +363,14 @@ impl AjoCircle {
 
         let configured_max_members = if max_members == 0 { MAX_MEMBERS } else { max_members };
 
-        if contribution_amount < MIN_CONTRIBUTION_AMOUNT as i128
+        if contribution_amount <= 0
+            || contribution_amount < MIN_CONTRIBUTION_AMOUNT as i128
             || contribution_amount > MAX_CONTRIBUTION_AMOUNT as i128
             || frequency_days < MIN_FREQUENCY_DAYS
             || frequency_days > MAX_FREQUENCY_DAYS
             || max_rounds < MIN_ROUNDS
             || max_rounds > MAX_ROUNDS
-            || configured_max_members == 0
+            || configured_max_members < 2
             || configured_max_members > HARD_CAP
         {
             return Err(AjoError::InvalidInput);
