@@ -27,6 +27,18 @@ mod timelock_tests;
 #[cfg(test)]
 mod interest_tests;
 
+#[cfg(test)]
+mod staking_tests;
+
+#[cfg(test)]
+mod split_payout_tests;
+
+#[cfg(test)]
+mod balance_simulation_tests;
+
+#[cfg(test)]
+mod validation_tests;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
     Symbol, Vec, BytesN,
@@ -83,6 +95,7 @@ pub enum AjoError {
     Paused = 17,
     TimelockNotReady = 18,
     WithdrawalCooldownActive = 19,
+    StakingDisabled = 20,
 }
 
 #[contracttype]
@@ -96,6 +109,15 @@ pub struct CircleData {
     pub current_round: u32,
     pub member_count: u32,
     pub max_members: u32,
+    pub yield_source: Option<Address>,
+    pub staking_enabled: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Beneficiary {
+    pub address: Address,
+    pub share_bps: u32, // Share in basis points (e.g., 5000 = 50.00%)
 }
 
 #[contracttype]
@@ -106,6 +128,7 @@ pub struct MemberData {
     pub total_withdrawn: i128,
     pub has_received_payout: bool,
     pub status: u32,
+    pub beneficiaries: Option<Vec<Beneficiary>>,
 }
 
 #[contracttype]
@@ -174,6 +197,9 @@ pub enum DataKey {
     KycVerified(Address),
     /// Pending WASM upgrade proposal (timelock)
     PendingUpgrade,
+    YieldSource,
+    StakedAmount,
+    TotalInterest,
 }
 
 #[contract]
@@ -337,13 +363,14 @@ impl AjoCircle {
 
         let configured_max_members = if max_members == 0 { MAX_MEMBERS } else { max_members };
 
-        if contribution_amount < MIN_CONTRIBUTION_AMOUNT as i128
+        if contribution_amount <= 0
+            || contribution_amount < MIN_CONTRIBUTION_AMOUNT as i128
             || contribution_amount > MAX_CONTRIBUTION_AMOUNT as i128
             || frequency_days < MIN_FREQUENCY_DAYS
             || frequency_days > MAX_FREQUENCY_DAYS
             || max_rounds < MIN_ROUNDS
             || max_rounds > MAX_ROUNDS
-            || configured_max_members == 0
+            || configured_max_members < 2
             || configured_max_members > HARD_CAP
         {
             return Err(AjoError::InvalidInput);
@@ -358,6 +385,8 @@ impl AjoCircle {
             current_round: 1,
             member_count: 1,
             max_members: configured_max_members,
+            yield_source: None,
+            staking_enabled: false,
         };
 
         env.storage().instance().set(&DataKey::Circle, &circle_data);
@@ -375,6 +404,7 @@ impl AjoCircle {
             total_withdrawn: 0,
             has_received_payout: false,
             status: 0,
+            beneficiaries: None,
         };
         Self::save_member(&env, &organizer, &organizer_data);
         Self::save_standing(&env, &organizer, &MemberStanding { missed_count: 0, is_active: true });
@@ -411,6 +441,7 @@ impl AjoCircle {
             total_withdrawn: 0,
             has_received_payout: false,
             status: 0,
+            beneficiaries: None,
         });
         Self::save_standing(&env, &new_member, &MemberStanding { missed_count: 0, is_active: true });
         Self::push_member_list(&env, &new_member);
@@ -423,6 +454,29 @@ impl AjoCircle {
 
     pub fn add_member(env: Env, organizer: Address, new_member: Address) -> Result<(), AjoError> {
         Self::join_circle(env, organizer, new_member)
+    }
+
+    pub fn set_beneficiaries(env: Env, member: Address, beneficiaries: Vec<Beneficiary>) -> Result<(), AjoError> {
+        member.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let mut member_data = Self::load_member(&env, &member)?;
+
+        if beneficiaries.len() == 0 {
+            member_data.beneficiaries = None;
+        } else {
+            let mut total_share: u32 = 0;
+            for b in beneficiaries.iter() {
+                total_share = total_share.checked_add(b.share_bps).ok_or(AjoError::ArithmeticOverflow)?;
+            }
+            if total_share != 10000 {
+                return Err(AjoError::InvalidInput);
+            }
+            member_data.beneficiaries = Some(beneficiaries);
+        }
+
+        Self::save_member(&env, &member, &member_data);
+        Ok(())
     }
 
     /// Remove a member before the circle starts, refunding any contributions they have made.
@@ -528,6 +582,23 @@ impl AjoCircle {
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&member, &env.current_contract_address(), &amount);
 
+        // Fee handling: Deduct fee from contribution if configured
+        let mut contribution_to_pool = amount;
+        if let Some(fee_config) = env.storage().instance().get::<DataKey, FeeConfig>(&DataKey::FeeConfig) {
+            if fee_config.fee_bps > 0 {
+                let fee = amount
+                    .checked_mul(fee_config.fee_bps as i128)
+                    .ok_or(AjoError::ArithmeticOverflow)?
+                    / 10000;
+                if fee > 0 {
+                    token_client.transfer(&env.current_contract_address(), &fee_config.treasury, &fee);
+                    contribution_to_pool = contribution_to_pool
+                        .checked_sub(fee)
+                        .ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        }
+
         member_data.total_contributed = member_data
             .total_contributed
             .checked_add(amount)
@@ -535,6 +606,11 @@ impl AjoCircle {
 
         let has_completed_round = member_data.total_contributed >= round_target;
         Self::save_member(&env, &member, &member_data);
+
+        // Update TotalPool with the amount AFTER fee deduction
+        let mut pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
+        pool = pool.checked_add(contribution_to_pool).ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::TotalPool, &pool);
 
         if !had_completed_round && has_completed_round {
             let mut round_contrib_count: u32 = env
@@ -600,7 +676,27 @@ impl AjoCircle {
         let token_client = token::Client::new(&env, &circle.token_address);
         token_client.transfer(&member, &env.current_contract_address(), &amount);
 
-        member_data.total_contributed += amount;
+        // Fee handling: Deduct fee from deposit if configured
+        let mut contribution_to_pool = amount;
+        if let Some(fee_config) = env.storage().instance().get::<DataKey, FeeConfig>(&DataKey::FeeConfig) {
+            if fee_config.fee_bps > 0 {
+                let fee = amount
+                    .checked_mul(fee_config.fee_bps as i128)
+                    .ok_or(AjoError::ArithmeticOverflow)?
+                    / 10000;
+                if fee > 0 {
+                    token_client.transfer(&env.current_contract_address(), &fee_config.treasury, &fee);
+                    contribution_to_pool = contribution_to_pool
+                        .checked_sub(fee)
+                        .ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        }
+
+        member_data.total_contributed = member_data
+            .total_contributed
+            .checked_add(amount)
+            .ok_or(AjoError::ArithmeticOverflow)?;
         Self::save_member(&env, &member, &member_data);
 
         // O(1): record timestamp under per-member key
@@ -609,7 +705,7 @@ impl AjoCircle {
             .set(&DataKey::LastDeposit(member.clone()), &env.ledger().timestamp());
 
         let mut pool: i128 = env.storage().instance().get(&DataKey::TotalPool).unwrap_or(0);
-        pool = pool.checked_add(amount).ok_or(AjoError::InvalidInput)?;
+        pool = pool.checked_add(contribution_to_pool).ok_or(AjoError::ArithmeticOverflow)?;
         env.storage().instance().set(&DataKey::TotalPool, &pool);
 
         // Check round completion by iterating the address list
@@ -709,7 +805,15 @@ impl AjoCircle {
             }
         }
 
-        let payout = required;
+        // Calculate interest share if staking is/was enabled
+        let mut total_interest: i128 = env.storage().instance().get(&DataKey::TotalInterest).unwrap_or(0);
+        let interest_share = if circle.max_rounds > 0 && total_interest > 0 {
+            total_interest / (circle.max_rounds as i128)
+        } else {
+            0
+        };
+
+        let payout = required.checked_add(interest_share).ok_or(AjoError::ArithmeticOverflow)?;
 
         // EFFECTS — all state before token transfer
         member_data.has_received_payout = true;
@@ -718,6 +822,11 @@ impl AjoCircle {
             .checked_add(payout)
             .ok_or(AjoError::ArithmeticOverflow)?;
         Self::save_member(&env, &member, &member_data);
+
+        if interest_share > 0 {
+            total_interest = total_interest.checked_sub(interest_share).ok_or(AjoError::ArithmeticOverflow)?;
+            env.storage().instance().set(&DataKey::TotalInterest, &total_interest);
+        }
 
         env.storage()
             .instance()
@@ -730,7 +839,26 @@ impl AjoCircle {
 
         // INTERACTIONS
         let token_client = token::Client::new(&env, &circle.token_address);
-        token_client.transfer(&env.current_contract_address(), &member, &payout);
+        
+        if let Some(beneficiaries) = member_data.beneficiaries {
+            let mut remaining = payout;
+            let len = beneficiaries.len();
+            for i in 0..len {
+                let b = beneficiaries.get(i).unwrap();
+                let share = if i == len - 1 {
+                    remaining
+                } else {
+                    payout.checked_mul(b.share_bps as i128).ok_or(AjoError::ArithmeticOverflow)? / 10000
+                };
+                
+                if share > 0 {
+                    token_client.transfer(&env.current_contract_address(), &b.address, &share);
+                    remaining = remaining.checked_sub(share).ok_or(AjoError::ArithmeticOverflow)?;
+                }
+            }
+        } else {
+            token_client.transfer(&env.current_contract_address(), &member, &payout);
+        }
 
         // Emit structured payout event
         emit_payout(&env, &WithdrawalEvent {
@@ -1446,6 +1574,96 @@ impl AjoCircle {
         env.storage().instance().remove(&DataKey::PendingUpgrade);
         env.deployer().update_current_contract_wasm(proposal.new_wasm_hash);
         Ok(())
+    }
+
+    // ---------------- STAKING ----------------
+
+    pub fn set_yield_source(env: Env, admin: Address, yield_source: Address) -> Result<(), AjoError> {
+        Self::require_admin(&env, &admin)?;
+        let mut circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
+        circle.yield_source = Some(yield_source);
+        env.storage().instance().set(&DataKey::Circle, &circle);
+        Ok(())
+    }
+
+    pub fn toggle_staking(env: Env, admin: Address, enabled: bool) -> Result<(), AjoError> {
+        Self::require_admin(&env, &admin)?;
+        let mut circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
+        circle.staking_enabled = enabled;
+        env.storage().instance().set(&DataKey::Circle, &circle);
+        Ok(())
+    }
+
+    pub fn stake_funds(env: Env, admin: Address, amount: i128) -> Result<(), AjoError> {
+        Self::require_admin(&env, &admin)?;
+        let circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
+
+        let yield_source = circle.yield_source.ok_or(AjoError::InvalidInput)?;
+        if !circle.staking_enabled {
+            return Err(AjoError::StakingDisabled);
+        }
+
+        let pool = Self::get_total_pool(env.clone());
+        if amount > pool {
+            return Err(AjoError::InsufficientFunds);
+        }
+
+        let token_client = token::Client::new(&env, &circle.token_address);
+        token_client.transfer(&env.current_contract_address(), &yield_source, &amount);
+
+        let mut staked: i128 = env.storage().instance().get(&DataKey::StakedAmount).unwrap_or(0);
+        staked = staked.checked_add(amount).ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::StakedAmount, &staked);
+
+        // Reduce TotalPool as these funds are now outside the contract
+        env.storage().instance().set(&DataKey::TotalPool, &(pool.checked_sub(amount).ok_or(AjoError::ArithmeticOverflow)?));
+
+        Ok(())
+    }
+
+    pub fn unstake_funds(env: Env, admin: Address, amount: i128) -> Result<i128, AjoError> {
+        Self::require_admin(&env, &admin)?;
+        let circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
+        let yield_source = circle.yield_source.ok_or(AjoError::InvalidInput)?;
+
+        let mut staked: i128 = env.storage().instance().get(&DataKey::StakedAmount).unwrap_or(0);
+        if amount > staked {
+            return Err(AjoError::InsufficientFunds);
+        }
+
+        let token_client = token::Client::new(&env, &circle.token_address);
+        let balance_before = token_client.balance(&env.current_contract_address());
+
+        // In a real scenario, we would call the yield source contract here.
+        // For now, we transfer from the yield source back to this contract.
+        token_client.transfer(&yield_source, &env.current_contract_address(), &amount);
+
+        let balance_after = token_client.balance(&env.current_contract_address());
+        let received = balance_after.checked_sub(balance_before).ok_or(AjoError::ArithmeticOverflow)?;
+
+        // Track interest if we received more than we asked for
+        if received > amount {
+            let interest = received.checked_sub(amount).ok_or(AjoError::ArithmeticOverflow)?;
+            let mut total_interest: i128 = env.storage().instance().get(&DataKey::TotalInterest).unwrap_or(0);
+            total_interest = total_interest.checked_add(interest).ok_or(AjoError::ArithmeticOverflow)?;
+            env.storage().instance().set(&DataKey::TotalInterest, &total_interest);
+        }
+
+        staked = staked.checked_sub(amount).ok_or(AjoError::ArithmeticOverflow)?;
+        env.storage().instance().set(&DataKey::StakedAmount, &staked);
+
+        let pool = Self::get_total_pool(env.clone());
+        env.storage().instance().set(&DataKey::TotalPool, &(pool.checked_add(received).ok_or(AjoError::ArithmeticOverflow)?));
+
+        Ok(received)
+    }
+
+    pub fn get_staked_amount(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::StakedAmount).unwrap_or(0)
+    }
+
+    pub fn get_total_interest(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::TotalInterest).unwrap_or(0)
     }
 }
 
