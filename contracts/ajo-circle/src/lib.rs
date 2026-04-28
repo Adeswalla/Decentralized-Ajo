@@ -174,6 +174,14 @@ pub enum DataKey {
     KycVerified(Address),
     /// Pending WASM upgrade proposal (timelock)
     PendingUpgrade,
+    /// Map<Address, Address> — member -> referrer mapping
+    Referrals,
+    /// Map<Address, i128> — referrer -> accumulated credit balance
+    ReferralCredits,
+    /// bool — auto-payout feature flag
+    AutoPayoutEnabled,
+    /// u32 — last round processed by auto-payout
+    LastAutoPayoutRound,
 }
 
 #[contract]
@@ -385,7 +393,7 @@ impl AjoCircle {
 
     // ---------------- MEMBERSHIP ----------------
 
-    pub fn join_circle(env: Env, organizer: Address, new_member: Address) -> Result<(), AjoError> {
+    pub fn join_circle(env: Env, organizer: Address, new_member: Address, referrer: Option<Address>) -> Result<(), AjoError> {
         organizer.require_auth();
         Self::require_not_paused(&env)?;
 
@@ -405,6 +413,19 @@ impl AjoCircle {
             return Err(AjoError::CircleAtCapacity);
         }
 
+        // Record referrer if provided and valid
+        if let Some(ref referrer_addr) = referrer {
+            if Self::member_exists(&env, referrer_addr) {
+                let mut referrals: Map<Address, Address> = env
+                    .storage()
+                    .instance()
+                    .get(&DataKey::Referrals)
+                    .unwrap_or_else(|| Map::new(&env));
+                referrals.set(new_member.clone(), referrer_addr.clone());
+                env.storage().instance().set(&DataKey::Referrals, &referrals);
+            }
+        }
+
         Self::save_member(&env, &new_member, &MemberData {
             address: new_member.clone(),
             total_contributed: 0,
@@ -422,7 +443,7 @@ impl AjoCircle {
     }
 
     pub fn add_member(env: Env, organizer: Address, new_member: Address) -> Result<(), AjoError> {
-        Self::join_circle(env, organizer, new_member)
+        Self::join_circle(env, organizer, new_member, None)
     }
 
     /// Remove a member before the circle starts, refunding any contributions they have made.
@@ -565,6 +586,9 @@ impl AjoCircle {
             }
             env.storage().instance().set(&DataKey::RoundContribCount, &round_contrib_count);
         }
+
+        // Award referral credits if member was referred
+        Self::award_referral_credit(&env, &member, amount)?;
 
         Ok(())
     }
@@ -746,6 +770,167 @@ impl AjoCircle {
 
     pub fn withdraw(env: Env, member: Address, cycle: u32) -> Result<i128, AjoError> {
         Self::claim_payout(env, member, cycle)
+    }
+
+    // ============== REFERRAL SYSTEM ==============
+
+    /// Award referral credits when referred member makes a contribution
+    fn award_referral_credit(env: &Env, member: &Address, amount: i128) -> Result<(), AjoError> {
+        let referrals: Map<Address, Address> = match env.storage().instance().get(&DataKey::Referrals) {
+            Some(refs) => refs,
+            None => return Ok(()), // No referrals stored yet
+        };
+
+        if let Some(referrer) = referrals.get(member.clone()) {
+            // Allocate 1% of contribution to referrer
+            let credit = (amount as u128 / 100) as i128;
+            if credit > 0 {
+                let mut credits: Map<Address, i128> = env
+                    .storage()
+                    .instance()
+                    .get(&DataKey::ReferralCredits)
+                    .unwrap_or_else(|| Map::new(env));
+
+                let current_credit = credits.get(referrer.clone()).unwrap_or(0);
+                credits.set(referrer.clone(), current_credit + credit);
+
+                env.storage().instance().set(&DataKey::ReferralCredits, &credits);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Claim accumulated referral credits
+    pub fn claim_referral_credits(env: Env, referrer: Address) -> Result<i128, AjoError> {
+        referrer.require_auth();
+
+        let mut credits: Map<Address, i128> = env
+            .storage()
+            .instance()
+            .get(&DataKey::ReferralCredits)
+            .ok_or(AjoError::NotFound)?;
+
+        let credit_amount = credits.get(referrer.clone()).ok_or(AjoError::NotFound)?;
+        if credit_amount <= 0 {
+            return Err(AjoError::InvalidInput);
+        }
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        // Transfer credits
+        let token_client = token::Client::new(&env, &circle.token_address);
+        token_client.transfer(&env.current_contract_address(), &referrer, &credit_amount);
+
+        // Clear the credited amount
+        credits.set(referrer.clone(), 0);
+        env.storage().instance().set(&DataKey::ReferralCredits, &credits);
+
+        Ok(credit_amount)
+    }
+
+    // ============== AUTO-PAYOUT SCHEDULING ==============
+
+    /// Enable automatic payout triggering for completed rounds
+    pub fn enable_auto_payout(env: Env, organizer: Address) -> Result<(), AjoError> {
+        organizer.require_auth();
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        if circle.organizer != organizer {
+            return Err(AjoError::Unauthorized);
+        }
+
+        env.storage().instance().set(&DataKey::AutoPayoutEnabled, &true);
+        Ok(())
+    }
+
+    /// Disable automatic payout triggering
+    pub fn disable_auto_payout(env: Env, organizer: Address) -> Result<(), AjoError> {
+        organizer.require_auth();
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        if circle.organizer != organizer {
+            return Err(AjoError::Unauthorized);
+        }
+
+        env.storage().instance().set(&DataKey::AutoPayoutEnabled, &false);
+        Ok(())
+    }
+
+    /// Process automatic payouts for matured rounds (called by external trigger/bot)
+    pub fn process_auto_payouts(env: Env) -> Result<u32, AjoError> {
+        let auto_enabled: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::AutoPayoutEnabled)
+            .unwrap_or(false);
+
+        if !auto_enabled {
+            return Ok(0);
+        }
+
+        let circle: CircleData = env
+            .storage()
+            .instance()
+            .get(&DataKey::Circle)
+            .ok_or(AjoError::NotFound)?;
+
+        let now = env.ledger().timestamp();
+        let last_payout_round: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::LastAutoPayoutRound)
+            .unwrap_or(0);
+
+        let deadline: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundDeadline)
+            .unwrap_or(0);
+
+        // Grace period: 1 hour after deadline
+        let grace_period: u64 = 3600;
+        if now < deadline || circle.current_round <= last_payout_round {
+            return Ok(0);
+        }
+
+        let rotation_order: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::RotationOrder)
+            .ok_or(AjoError::NotFound)?;
+
+        if rotation_order.is_empty() {
+            return Err(AjoError::NotFound);
+        }
+
+        let payout_idx = ((circle.current_round - 1) as usize) % (rotation_order.len() as usize);
+        let beneficiary = rotation_order.get(payout_idx).ok_or(AjoError::NotFound)?;
+
+        // Attempt payout
+        match Self::claim_payout(env.clone(), beneficiary, circle.current_round) {
+            Ok(_) => {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::LastAutoPayoutRound, &circle.current_round);
+                Ok(circle.current_round)
+            }
+            Err(_) => Ok(0), // Payout not ready, return 0
+        }
     }
 
     pub fn partial_withdraw(env: Env, member: Address) -> Result<i128, AjoError> {
