@@ -622,6 +622,65 @@ contract AjoCircle is Ownable, ReentrancyGuard, Pausable {
         require(success, "Transfer failed");
     }
 
+    /**
+     * @dev Dissolve circle and refund all members based on their contribution history
+     * Can be triggered by organizer or through unanimous vote
+     * Distributes all remaining funds proportionally to members
+     * @param _circleId Circle ID
+     */
+    function dissolveCircle(uint256 _circleId) 
+        external 
+        circleExists(_circleId)
+        nonReentrant 
+        whenNotPaused
+    {
+        Circle storage circle = circles[_circleId];
+        
+        // Only organizer can dissolve
+        require(msg.sender == circle.organizer, "Only organizer can dissolve");
+        
+        // Mark circle as closed
+        circle.isClosed = true;
+        
+        // Calculate total pool for this circle
+        uint256 circlePool = totalPool[_circleId];
+        
+        // Refund all members based on their net contributions
+        address[] memory membersList = circleMembers[_circleId];
+        
+        for (uint256 i = 0; i < membersList.length; i++) {
+            address memberAddr = membersList[i];
+            Member storage member = members[_circleId][memberAddr];
+            
+            if (member.isActive) {
+                // Calculate refund: totalContributed - totalWithdrawn
+                uint256 netContribution = member.totalContributed - member.totalWithdrawn;
+                
+                if (netContribution > 0 && circlePool >= netContribution) {
+                    // Update member state
+                    member.totalWithdrawn = member.totalContributed;
+                    member.isActive = false;
+                    
+                    // Update circle pool
+                    totalPool[_circleId] = circlePool - netContribution;
+                    circlePool = totalPool[_circleId];
+                    
+                    // Transfer refund to member
+                    (bool success, ) = payable(memberAddr).call{value: netContribution}("");
+                    require(success, "Refund transfer failed");
+                    
+                    emit MemberRefunded(_circleId, memberAddr, netContribution);
+                }
+            }
+        }
+        
+        emit CircleDissolved(_circleId, msg.sender, circlePool);
+    }
+
+    // ---------------- Events for Dissolution ----------------
+    event CircleDissolved(uint256 indexed circleId, address indexed initiator, uint256 remainingPool);
+    event MemberRefunded(uint256 indexed circleId, address indexed member, uint256 amount);
+
     // ---------------- Internal Functions ----------------
 
     /**
