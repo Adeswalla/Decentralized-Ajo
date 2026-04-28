@@ -39,6 +39,8 @@ mod balance_simulation_tests;
 #[cfg(test)]
 mod validation_tests;
 
+#[cfg(test)]
+mod pause_tests;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
     Symbol, Vec, BytesN,
@@ -257,7 +259,7 @@ impl AjoCircle {
 
     fn require_not_paused(env: &Env) -> Result<(), AjoError> {
         if Self::is_paused(env) {
-            Err(AjoError::CirclePanicked)
+            Err(AjoError::Paused)
         } else {
             Ok(())
         }
@@ -550,9 +552,7 @@ impl AjoCircle {
 
     pub fn contribute(env: Env, member: Address, amount: i128) -> Result<(), AjoError> {
         member.require_auth();
-        if Self::is_paused(&env) {
-            return Err(AjoError::Paused);
-        }
+        Self::require_not_paused(&env)?;
         if amount <= 0 {
             return Err(AjoError::InvalidInput);
         }
@@ -647,9 +647,7 @@ impl AjoCircle {
 
     pub fn deposit(env: Env, member: Address) -> Result<(), AjoError> {
         member.require_auth();
-        if Self::is_paused(&env) {
-            return Err(AjoError::Paused);
-        }
+        Self::require_not_paused(&env)?;
 
         let circle: CircleData = env
             .storage()
@@ -943,6 +941,7 @@ impl AjoCircle {
 
     pub fn start_dissolution_vote(env: Env, caller: Address, threshold_mode: u32) -> Result<(), AjoError> {
         caller.require_auth();
+        Self::require_not_paused(&env)?;
 
         if threshold_mode > 1 {
             return Err(AjoError::InvalidInput);
@@ -986,6 +985,7 @@ impl AjoCircle {
 
     pub fn vote_to_dissolve(env: Env, member: Address) -> Result<(), AjoError> {
         member.require_auth();
+        Self::require_not_paused(&env)?;
 
         // O(1): check membership via per-member key
         if !Self::member_exists(&env, &member) {
@@ -1209,6 +1209,7 @@ impl AjoCircle {
 
     pub fn grant_role(env: Env, caller: Address, role: Symbol, new_member: Address) -> Result<(), AjoError> {
         Self::require_deployer(&env, &caller)?;
+        Self::require_not_paused(&env)?;
 
         if role != ADMIN_ROLE && role != MANAGER_ROLE {
             return Err(AjoError::InvalidInput);
@@ -1248,6 +1249,7 @@ impl AjoCircle {
 
     pub fn revoke_role(env: Env, caller: Address, role: Symbol, member: Address) -> Result<(), AjoError> {
         Self::require_deployer(&env, &caller)?;
+        Self::require_not_paused(&env)?;
 
         if role != ADMIN_ROLE && role != MANAGER_ROLE {
             return Err(AjoError::InvalidInput);
@@ -1324,6 +1326,7 @@ impl AjoCircle {
         fee_bps: u32,
     ) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         if fee_bps > 1000 {
             return Err(AjoError::InvalidInput);
         }
@@ -1494,6 +1497,7 @@ impl AjoCircle {
 
     pub fn slash_member(env: Env, admin: Address, member: Address) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
 
         // O(1): load only this member's standing
         let mut standing = Self::load_standing(&env, &member)?;
@@ -1513,6 +1517,7 @@ impl AjoCircle {
         is_verified: bool,
     ) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
 
         // O(1): check membership via per-member key
         if !Self::member_exists(&env, &member) {
@@ -1532,6 +1537,7 @@ impl AjoCircle {
         member: Address,
     ) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
 
         // O(1): load only this member's standing
         let mut standing = Self::load_standing(&env, &member)?;
@@ -1551,6 +1557,7 @@ impl AjoCircle {
 
     pub fn propose_upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<u64, AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let unlock_time = env.ledger().timestamp() + UPGRADE_TIMELOCK_SECONDS;
         let proposal = TimelockProposal { new_wasm_hash, unlock_time };
         env.storage().instance().set(&DataKey::PendingUpgrade, &proposal);
@@ -1563,6 +1570,7 @@ impl AjoCircle {
 
     pub fn execute_upgrade(env: Env, admin: Address) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let proposal: TimelockProposal = env
             .storage()
             .instance()
@@ -1580,6 +1588,7 @@ impl AjoCircle {
 
     pub fn set_yield_source(env: Env, admin: Address, yield_source: Address) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let mut circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
         circle.yield_source = Some(yield_source);
         env.storage().instance().set(&DataKey::Circle, &circle);
@@ -1588,6 +1597,7 @@ impl AjoCircle {
 
     pub fn toggle_staking(env: Env, admin: Address, enabled: bool) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let mut circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
         circle.staking_enabled = enabled;
         env.storage().instance().set(&DataKey::Circle, &circle);
@@ -1596,6 +1606,7 @@ impl AjoCircle {
 
     pub fn stake_funds(env: Env, admin: Address, amount: i128) -> Result<(), AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
 
         let yield_source = circle.yield_source.ok_or(AjoError::InvalidInput)?;
@@ -1623,6 +1634,7 @@ impl AjoCircle {
 
     pub fn unstake_funds(env: Env, admin: Address, amount: i128) -> Result<i128, AjoError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
         let circle: CircleData = env.storage().instance().get(&DataKey::Circle).ok_or(AjoError::NotFound)?;
         let yield_source = circle.yield_source.ok_or(AjoError::InvalidInput)?;
 
@@ -1758,7 +1770,7 @@ mod inline_tests {
         let (client, organizer, member_b, _, _) = setup_contribute(&env);
 
         client.panic(&organizer);
-        assert_eq!(client.contribute(&member_b, &100_i128), Err(AjoError::CirclePanicked));
+        assert_eq!(client.contribute(&member_b, &100_i128), Err(AjoError::Paused));
     }
 
     #[test]

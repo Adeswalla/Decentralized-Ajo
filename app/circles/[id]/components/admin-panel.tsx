@@ -150,11 +150,21 @@ export function AdminPanel({ circleId, circle, currentUserId, onUpdate }: AdminP
         return;
       }
 
-      toast.success('Circle dissolved successfully');
+      const result = await response.json();
+      
+      // Show detailed success message with fund distribution info
+      if (result.data?.refunds?.length > 0) {
+        toast.success(
+          `Circle dissolved successfully. ${result.data.refunds.length} member(s) will receive refunds totaling ${result.data.remainingPool.toFixed(2)}`
+        );
+      } else {
+        toast.success('Circle dissolved successfully');
+      }
+      
       onUpdate();
       // Redirect after a short delay
       setTimeout(() => {
-        window.location.href = '/';
+        window.location.href = '/dashboard';
       }, 2000);
     } catch (error) {
       console.error('Error dissolving circle:', error);
@@ -269,11 +279,21 @@ export function AdminPanel({ circleId, circle, currentUserId, onUpdate }: AdminP
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Dissolve Circle</AlertDialogTitle>
+                <AlertDialogTitle>Emergency Dissolution</AlertDialogTitle>
                 <AlertDialogDescription className="space-y-3">
                   <p>
-                    This will permanently dissolve the circle and mark it as CANCELLED. All members will lose access.
+                    This will permanently dissolve the circle and distribute all remaining funds back to members based on their contribution history.
                   </p>
+                  <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md p-3 text-sm">
+                    <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">What happens:</p>
+                    <ul className="list-disc list-inside space-y-1 text-amber-800 dark:text-amber-200">
+                      <li>Circle status will be set to DISSOLVED</li>
+                      <li>All members will be exited from the circle</li>
+                      <li>Remaining funds will be refunded to members (no penalty)</li>
+                      <li>Each member receives: totalContributed - totalWithdrawn</li>
+                      <li>All members will be notified</li>
+                    </ul>
+                  </div>
                   <p className="font-semibold text-foreground">
                     Type <span className="text-red-600">DELETE</span> to confirm:
                   </p>
@@ -299,7 +319,7 @@ export function AdminPanel({ circleId, circle, currentUserId, onUpdate }: AdminP
             </AlertDialogContent>
           </AlertDialog>
           <p className="text-xs text-muted-foreground">
-            Permanently dissolve this circle. This action cannot be undone.
+            Emergency dissolution: Permanently dissolve this circle and refund all remaining funds to members based on their contributions (no penalty applied).
           </p>
         </div>
       </CardContent>

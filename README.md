@@ -367,71 +367,20 @@ import {
 
 ### Authentication
 
-The authentication flow follows a standard register → verify email → login → use token → refresh → logout pattern. Access tokens are short-lived (15 min); refresh tokens are rotated on every use and stored in an `HttpOnly` cookie.
-
-#### Complete Flow Example
-
-**Step 1 — Register**
-
-```bash
-curl -X POST https://your-app.vercel.app/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePassword123!",
-    "firstName": "John",
-    "lastName": "Doe"
-  }'
-```
-
-```json
-// 201 Created
 {
   "success": true,
   "message": "Registration successful. Please check your email to verify your account."
 }
 ```
 
-```json
-// 409 Conflict — email already registered
-{ "error": "User with this email already exists" }
 
-// 400 Bad Request — weak password
 {
   "error": "Password does not meet strength requirements",
   "details": ["Password must be at least 8 characters"]
 }
 ```
 
-**Step 2 — Verify Email**
 
-Click the link in the verification email, or call the endpoint directly with the token from the email:
-
-```bash
-curl -X POST https://your-app.vercel.app/api/auth/verify-email \
-  -H "Content-Type: application/json" \
-  -d '{ "token": "<verification-token-from-email>" }'
-```
-
-```json
-// 200 OK
-{ "success": true, "message": "Email verified successfully." }
-```
-
-**Step 3 — Login**
-
-```bash
-curl -X POST https://your-app.vercel.app/api/auth/login \
-  -H "Content-Type: application/json" \
-  -c cookies.txt \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePassword123!"
-  }'
-```
-
-```json
-// 200 OK — access token in body, refresh token set as HttpOnly cookie
 {
   "success": true,
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -445,98 +394,12 @@ curl -X POST https://your-app.vercel.app/api/auth/login \
 }
 ```
 
-```json
-// 401 Unauthorized
-{ "code": "invalid_credentials", "message": "Invalid email or password" }
-
-// 403 Forbidden — email not yet verified
-{ "code": "email_not_verified", "message": "Please verify your email address before logging in." }
-```
-
-**Step 4 — Call Protected Endpoints**
-
-Pass the access token as a Bearer header:
 
 ```bash
 curl https://your-app.vercel.app/api/circles \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-**Step 5 — Refresh the Access Token**
-
-When the access token expires, use the refresh token cookie to get a new one. The old refresh token is invalidated and a new one is set automatically.
-
-```bash
-curl -X POST https://your-app.vercel.app/api/auth/refresh \
-  -b cookies.txt \
-  -c cookies.txt
-```
-
-```json
-// 200 OK — new access token; new refresh token cookie set
-{ "success": true, "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
-```
-
-```json
-// 401 Unauthorized — token expired or reuse detected (session revoked)
-{ "error": "Invalid or expired refresh token" }
-```
-
-**Step 6 — Logout**
-
-Revokes all refresh tokens for the user and clears the cookie.
-
-```bash
-curl -X POST https://your-app.vercel.app/api/auth/logout \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -b cookies.txt \
-  -c cookies.txt
-```
-
-```json
-// 200 OK
-{ "success": true }
-```
-
-#### Same Flow with `fetch`
-
-```js
-const BASE = 'https://your-app.vercel.app/api';
-
-// Register
-await fetch(`${BASE}/auth/register`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email: 'user@example.com', password: 'SecurePassword123!', firstName: 'John', lastName: 'Doe' }),
-});
-
-// Login — credentials: 'include' sends/receives the HttpOnly refresh token cookie
-const { token, user } = await fetch(`${BASE}/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include',
-  body: JSON.stringify({ email: 'user@example.com', password: 'SecurePassword123!' }),
-}).then(r => r.json());
-
-// Authenticated request
-await fetch(`${BASE}/circles`, {
-  headers: { Authorization: `Bearer ${token}` },
-  credentials: 'include',
-});
-
-// Refresh
-const { token: newToken } = await fetch(`${BASE}/auth/refresh`, {
-  method: 'POST',
-  credentials: 'include',
-}).then(r => r.json());
-
-// Logout
-await fetch(`${BASE}/auth/logout`, {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${token}` },
-  credentials: 'include',
-});
-```
 
 ### Circles
 
