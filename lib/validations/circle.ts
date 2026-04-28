@@ -29,6 +29,32 @@ export const CreateCircleSchema = z.object({
     .int('InvalidInput: maxRounds must be an integer')
     .min(MIN_ROUNDS, `InvalidInput: min rounds is ${MIN_ROUNDS}`)
     .max(MAX_ROUNDS, `InvalidInput: max rounds is ${MAX_ROUNDS}`),
+  // Optional multisig configuration
+  multisigEnabled: z.boolean().optional(),
+  multisigThreshold: z.number().min(0).optional(),
+  requiredApprovals: z.number().int().min(1).max(10).optional(),
+  approvers: z.array(z.string()).optional(),
+});
+
+// Update schema to include multisig fields
+export const UpdateCircleSchema = z.object({
+  name: z.string().min(3, 'Name must be at least 3 characters').max(50).optional(),
+  description: z.string().max(500).optional(),
+  contributionAmount: z
+    .number()
+    .int('InvalidInput: contributionAmount must be an integer')
+    .min(MIN_CONTRIBUTION_AMOUNT, `InvalidInput: min contribution is ${MIN_CONTRIBUTION_AMOUNT}`)
+    .max(MAX_CONTRIBUTION_AMOUNT, `InvalidInput: max contribution is ${MAX_CONTRIBUTION_AMOUNT}`),
+  contributionFrequencyDays: z
+    .number()
+    .int('InvalidInput: contributionFrequencyDays must be an integer')
+    .min(MIN_FREQUENCY_DAYS, `InvalidInput: min frequency is ${MIN_FREQUENCY_DAYS} day`)
+    .max(MAX_FREQUENCY_DAYS, `InvalidInput: max frequency is ${MAX_FREQUENCY_DAYS} days`),
+  maxRounds: z
+    .number()
+    .int('InvalidInput: maxRounds must be an integer')
+    .min(MIN_ROUNDS, `InvalidInput: min rounds is ${MIN_ROUNDS}`)
+    .max(MAX_ROUNDS, `InvalidInput: max rounds is ${MAX_ROUNDS}`),
   maxMembers: z
     .number()
     .int('InvalidInput: maxMembers must be an integer')

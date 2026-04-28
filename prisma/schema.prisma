@@ -42,6 +42,7 @@ model User {
   votes     GovernanceVote[]
   contributions Contribution[]
   withdrawals Withdrawal[]
+  withdrawalApprovals WithdrawalApproval[]
   refreshTokens RefreshToken[]
   notifications Notification[]
   deadlineReminders DeadlineReminder[]
@@ -104,6 +105,12 @@ model Circle {
   maxRounds Int @default(12)
   currentRound Int @default(1)
   status    CircleStatus @default(ACTIVE)
+  
+  // Multisig Configuration
+  multisigEnabled Boolean @default(false)
+  multisigThreshold Float @default(0) // Amount above which multisig is required
+  requiredApprovals Int @default(2) // Number of approvals needed
+  approvers String? // JSON array of user IDs who can approve
   
   @@index([category])
   @@index([status, category])
@@ -328,12 +335,31 @@ model Withdrawal {
   createdAt DateTime @default(now())
   approvedAt DateTime?
   completedAt DateTime?
+  
+  // Multisig approvals
+  approvals WithdrawalApproval[]
 
   @@index([circleId])
   @@index([userId])
   @@index([status])
   @@index([circleId, status])
   @@index([userId, status])
+}
+
+model WithdrawalApproval {
+  id          String   @id @default(cuid())
+  withdrawalId String
+  withdrawal  Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  approverId  String
+  approver    User @relation(fields: [approverId], references: [id], onDelete: Cascade)
+  
+  approved    Boolean
+  comment     String?
+  createdAt   DateTime @default(now())
+  
+  @@unique([withdrawalId, approverId])
+  @@index([withdrawalId])
+  @@index([approverId])
 }
 
 enum WithdrawalStatus {
