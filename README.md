@@ -1,365 +1,203 @@
-# Stellar Ajo - Decentralized Savings Circle
+# Kinetic Trust - Decentralized Identity Dashboard
 
-A Full-Stack Decentralized savings circle application built on the Stellar Network. Enables groups of people to pool money, take turns receiving lump sums, vote on governance decisions, and manage contributions with full transparency through Smart Contracts.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Setup Instructions](#setup-instructions)
-- [API Documentation](#api-documentation)
-- [Smart Contract](#smart-contract)
-- [Deployment](#deployment)
-
-## Overview
-
-**Ajo** (or **Esusu** in West African cultures) is a traditional savings circle where members pool money and take turns receiving the total amount. Stellar Ajo brings this ancient concept to Web3 using:
-
-- **Smart Contracts (Soroban)**: Secure fund management and automation
-- **Stellar Network**: Fast, low-cost transactions
-- **Decentralized Governance**: Community voting on circle rules
-- **Full Transparency**: All transactions on-chain
+A modern, responsive dashboard application for managing decentralized identity credentials and verification on the Kinetic Trust network.
 
 ## Features
 
-### Core Features
-- ✅ **Circle Management**: Create and manage savings circles
-- ✅ **Member Contributions**: Track contributions from all members
-- ✅ **Rotation Payouts**: Automated payout distribution in rounds
-- ✅ **Contribution Scheduling**: Set up recurring contribution schedules
-- ✅ **Governance Voting**: Members vote on circle decisions
-- ✅ **Partial Withdrawals**: Emergency access to funds with penalties
-- ✅ **User Accounts**: Email/password authentication with JWT
-- ✅ **Wallet Integration**: Connect Stellar wallets (Freighter, Lobstr)
+- **Identity Verification**: Display user's verified identity status on the mainnet
+- **Credentials Management**: View and manage active credentials with issuer details
+- **Trust Score**: Visual trust score gauge showing verification level (0-100)
+- **Pending Requests**: Track incoming credential and verification requests
+- **Network Activity**: Real-time feed of identity verification updates and transactions
+- **Admin Dashboard**: Workspace and organization management tools
 
-### Dashboard Features
-- Circle creation and management
-- Member management
-- Contribution tracking
-- Transaction history
-- Real-time circle statistics
-- Governance proposal voting
+## Tech Stack
 
-## Technology Stack
-
-### Frontend
 - **Framework**: Next.js 16 (App Router)
-- **UI Components**: shadcn/ui
-- **Styling**: Tailwind CSS 4
-- **State Management**: SWR (for data fetching)
-- **Wallet Connection**: Freighter / Stellar Wallets Kit
-
-### Backend
-- **Runtime**: Node.js (Next.js API Routes)
-- **Database**: SQLite (development) / PostgreSQL (production)
-- **ORM**: Prisma
-- **Authentication**: JWT + Password Hashing (bcryptjs)
-
-### Blockchain
-- **Network**: Stellar Network (Testnet/Mainnet)
-- **Smart Contracts**: Soroban (Rust)
-- **Contract Deployment**: Stellar SDK
-- **RPC**: Soroban RPC Server
-
-### Development
-- **Language**: TypeScript
-- **Package Manager**: pnpm
-- **Deployment**: Vercel
+- **UI Library**: React 19 with TypeScript
+- **Styling**: Tailwind CSS 4 with dark theme
+- **Icons**: Lucide React
+- **Deployment**: Optimized for Vercel
 
 ## Project Structure
 
 ```
-.
-├── app/
-│   ├── api/                    # Next.js API routes
-│   │   ├── auth/              # Authentication endpoints
-│   │   └── circles/           # Circle management APIs
-│   ├── auth/                  # Authentication pages
-│   │   ├── login/
-│   │   └── register/
-│   ├── circles/               # Circle pages
-│   │   ├── create/
-│   │   └── [id]/
-│   ├── globals.css            # Global styles
-│   ├── layout.tsx             # Root layout
-│   └── page.tsx               # Home page
-├── components/
-│   ├── ui/                    # shadcn/ui components
-│   └── wallet-button.tsx      # Wallet connection component
-├── contracts/
-│   └── ajo-circle/            # Soroban smart contract
-│       ├── src/
-│       │   └── lib.rs         # Contract implementation
-│       └── Cargo.toml
-├── lib/
-│   ├── auth.ts                # Authentication utilities
-│   ├── prisma.ts              # Prisma client
-│   ├── stellar-config.ts      # Stellar SDK configuration
-│   └── wallet-context.tsx     # Wallet context provider
-├── prisma/
-│   └── schema.prisma          # Database schema
-├── public/                    # Static assets
-└── scripts/                   # Utility scripts
+app/
+├── layout.tsx           # Root layout with metadata and theme
+├── page.tsx            # Main dashboard page
+└── globals.css         # Global styles and design tokens
+
+components/
+├── sidebar.tsx              # Left navigation sidebar
+├── header.tsx              # Top header with search and profile
+├── welcome-section.tsx     # Welcome greeting section
+├── credentials-section.tsx # Active credentials display
+├── pending-requests-section.tsx # Pending requests table
+├── trust-score-section.tsx # Trust score circular gauge
+└── network-activity-section.tsx # Activity feed
+
+lib/
+└── utils.ts            # Utility functions (cn helper)
 ```
 
-## Setup Instructions
+## Design System
 
-### Prerequisites
-- Node.js 18+ or compatible version
-- pnpm (recommended) or npm
-- Freighter wallet extension (for wallet integration)
-- Vercel account (for deployment)
+### Color Palette
 
-### 1. Clone and Install
+- **Background**: `#0f1419` (dark navy)
+- **Card**: `#1a2332` (dark blue-gray)
+- **Accent**: `#00d9c4` (bright cyan/teal)
+- **Foreground**: `#e4e8f0` (light gray)
+- **Muted**: `#3f5a7f` (muted blue)
 
-```bash
-# Install dependencies
-pnpm install
+### Typography
 
-# Set up environment variables
-cp .env.example .env.local
-```
+- **Headings**: Inter/System font, weights 600-700
+- **Body**: Inter/System font, weight 400-500
+- **Monospace**: Code styling for hashes and technical data
 
-### 2. Configure Environment Variables
+## Installation
 
-Edit `.env.local` with your configuration:
+### Quick Start with v0
 
-```env
-# Stellar Network (use testnet for development)
-NEXT_PUBLIC_STELLAR_NETWORK=testnet
-NEXT_PUBLIC_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
-NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+1. Use the shadcn CLI to set up the project:
+   ```bash
+   npx shadcn-cli@latest init
+   ```
 
-# Soroban RPC
-NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
-NEXT_PUBLIC_AJO_CONTRACT_ADDRESS=<your-contract-address>
+2. Install dependencies:
+   ```bash
+   pnpm install
+   ```
 
-# Database
-DATABASE_URL=file:./dev.db
+3. Run the development server:
+   ```bash
+   pnpm dev
+   ```
 
-# JWT Secret (change for production!)
-JWT_SECRET=your-super-secret-jwt-key-change-this
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-# API
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
-```
+### GitHub Integration
 
-### 3. Set Up Database
+To use with GitHub:
 
-```bash
-# Generate Prisma client
-pnpm prisma generate
+1. Connect your repository through the v0 project settings
+2. All changes are automatically pushed to your configured branch
+3. Deploy to Vercel with one click
 
-# Create database and run migrations
-pnpm prisma migrate dev
+## Components
 
-# Seed database (optional)
-pnpm prisma db seed
-```
+### Sidebar
+Navigation menu with role switching (Issuer/Holder), workspace links, and mainnet connection status.
 
-### 4. Deploy Smart Contract
+### Header
+Search bar for decentralized web, user status indicator, notifications, and profile avatar.
 
-```bash
-# Install Soroban CLI
-# See: https://developers.stellar.org/docs/smart-contracts/getting-started/setup
+### Welcome Section
+Personalized greeting with user identity, verification status, and action buttons (Share Verification, Request New).
 
-# Build the contract
-cd contracts/ajo-circle
-cargo build --target wasm32-unknown-unknown --release
+### Credentials Section
+Grid display of active credentials with:
+- Credential type and icon
+- Issuing organization
+- Credential hash and validity period
+- Active status badge
 
-# Deploy to testnet (requires Stellar account with XLM)
-# Follow Soroban deployment guide with the compiled WASM
+### Pending Requests Section
+Table view of incoming requests with:
+- Credential type
+- Requesting issuer
+- Current status (PENDING)
 
-# Update NEXT_PUBLIC_AJO_CONTRACT_ADDRESS in .env.local
-```
+### Trust Score Section
+Circular progress gauge showing:
+- Trust score (0-100)
+- Visual indicator of verification level
+- Description of score meaning
 
-### 5. Run Development Server
+### Network Activity Section
+Timeline feed showing:
+- Identity verification updates
+- Request approvals
+- Credential submissions
+- Transaction hashes and timestamps
 
-```bash
-pnpm dev
-```
+## Customization
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
+### Colors
 
-## API Documentation
+Edit the CSS variables in `app/globals.css` under `:root`:
 
-### Authentication
-
-#### Register
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "SecurePassword123!",
-  "firstName": "John",
-  "lastName": "Doe"
+```css
+:root {
+  --background: #0f1419;
+  --accent: #00d9c4;
+  --card: #1a2332;
+  /* ... more colors ... */
 }
 ```
 
-#### Login
-```http
-POST /api/auth/login
-Content-Type: application/json
+### Icons
 
-{
-  "email": "user@example.com",
-  "password": "SecurePassword123!"
-}
+Icons are from Lucide React. Replace or add icons in component files:
+
+```tsx
+import { IconName } from 'lucide-react'
 ```
 
-### Circles
+### Data
 
-#### Create Circle
-```http
-POST /api/circles
-Authorization: Bearer <token>
-Content-Type: application/json
+Currently using mock data. To integrate with a real API:
 
-{
-  "name": "Office Savings Circle",
-  "description": "Monthly savings circle for office team",
-  "contributionAmount": 100.50,
-  "contributionFrequencyDays": 7,
-  "maxRounds": 12
-}
-```
-
-#### Get All Circles
-```http
-GET /api/circles
-Authorization: Bearer <token>
-```
-
-#### Get Circle Details
-```http
-GET /api/circles/:id
-Authorization: Bearer <token>
-```
-
-#### Make Contribution
-```http
-POST /api/circles/:id/contribute
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "amount": 100.50
-}
-```
-
-## Smart Contract
-
-### Soroban Contract Features
-
-The Soroban smart contract (`contracts/ajo-circle/src/lib.rs`) implements:
-
-#### Functions
-- `initialize_circle()` - Create a new circle
-- `add_member()` - Add member to circle
-- `contribute()` - Record member contribution
-- `claim_payout()` - Claim payout when it's member's turn
-- `partial_withdraw()` - Withdraw portion with penalty
-- `get_circle_state()` - Query current circle status
-- `get_member_balance()` - Query member details
-- `get_members()` - List all members
-
-#### Contract State
-- Circle metadata (organizer, amounts, frequency, rounds)
-- Member records (contributions, withdrawals, payout status)
-- Contribution tracking
-
-### Building the Contract
-
-```bash
-cd contracts/ajo-circle
-
-# Build WASM
-cargo build --target wasm32-unknown-unknown --release
-
-# The compiled WASM will be in:
-# target/wasm32-unknown-unknown/release/ajo_circle.wasm
-```
+1. Create API routes in `app/api/`
+2. Use SWR or React Query for data fetching
+3. Update component state management
+4. Add authentication as needed
 
 ## Deployment
 
 ### Deploy to Vercel
 
-1. Push code to GitHub:
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
-```
+1. Push your repository to GitHub
+2. Import the project in [Vercel Dashboard](https://vercel.com)
+3. Click "Deploy"
 
-2. Deploy to Vercel:
-   - Connect your GitHub repository at [vercel.com](https://vercel.com)
-   - Set environment variables in Vercel dashboard
-   - Deploy!
+The application will be live in minutes with automatic deployments on every push.
 
-### Stellar Network Deployment
+### Environment Variables
 
-#### Testnet (Recommended for Testing)
-- Network: `Test SDF Network ; September 2015`
-- Horizon: `https://horizon-testnet.stellar.org`
-- Soroban RPC: `https://soroban-testnet.stellar.org`
+No environment variables required for the base application. Add them as needed for API integrations.
 
-#### Mainnet (Production)
-- Network: `Public Global Stellar Network ; September 2015`
-- Horizon: `https://horizon.stellar.org`
-- Soroban RPC: `https://soroban.stellar.org`
+## Performance
 
-### Security Checklist
+- **Optimized Images**: Lucide SVG icons load efficiently
+- **Code Splitting**: Next.js automatically splits code at route level
+- **CSS-in-JS**: Tailwind CSS generates only used styles
+- **Component Lazy Loading**: Components are code-split by default
 
-Before mainnet deployment:
-- [ ] Change JWT_SECRET to a secure random string
-- [ ] Enable HTTPS on production
-- [ ] Set up rate limiting on API routes
-- [ ] Implement input validation on all endpoints
-- [ ] Audit smart contract code
-- [ ] Set up database backups
-- [ ] Enable wallet signature verification
-- [ ] Implement proper error handling
+## Accessibility
 
-## Database Schema
+- Semantic HTML elements throughout
+- ARIA labels where needed
+- High contrast text (teal on dark background)
+- Keyboard-navigable interface
+- Focus states on interactive elements
 
-The application uses Prisma ORM with the following main tables:
+## Browser Support
 
-- **User**: User accounts and profiles
-- **Circle**: Savings circles
-- **CircleMember**: Circle membership and rotation tracking
-- **Contribution**: Contribution transactions
-- **PaymentSchedule**: Payout schedule tracking
-- **GovernanceProposal**: Voting proposals
-- **GovernanceVote**: Vote records
-- **Withdrawal**: Partial withdrawal requests
-- **Session**: Authentication sessions
-
-See `prisma/schema.prisma` for complete schema details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- Chrome/Edge (latest)
+- Firefox (latest)
+- Safari (latest)
+- Mobile browsers (iOS Safari, Chrome Mobile)
 
 ## License
 
-This project is open source and available under the MIT License.
+MIT - feel free to use for personal or commercial projects
 
 ## Support
 
-For issues, questions, or suggestions, please open an issue on GitHub.
-
-## Acknowledgments
-
-- [Stellar Development Foundation](https://stellar.org/) - For the incredible Stellar Network and Soroban
-- [Vercel](https://vercel.com/) - For deployment infrastructure
-- [shadcn/ui](https://ui.shadcn.com/) - For beautiful UI components
-- Traditional Ajo/Esusu communities - For inspiring this project
-
----
-
-**Built with ❤️ for communities saving together.**
-
+For issues or questions:
+1. Check the [Next.js Documentation](https://nextjs.org)
+2. Review [Tailwind CSS Docs](https://tailwindcss.com)
+3. Visit [Lucide Icons](https://lucide.dev)
+4. Open a support ticket on Vercel
